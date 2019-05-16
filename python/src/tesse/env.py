@@ -49,16 +49,20 @@ class Env(object):
         tag = data[0:4].decode("utf-8")
 
         if tag == 'mult':
-            pass
+            data.extend(conn.recv(8))
+            data_length = struct.unpack("I",data[4:8])[0] + struct.unpack("I",data[8:12])[0]
 
-        elif tag == 'meta':
-            pass
-
-        elif tag == 'cami':
-            pass
+        elif tag == 'meta' or tag == 'cami':
+            data.extend(conn.recv(4))
+            data_length = struct.unpack("I",data[4:8])[0]
 
         else
             raise Exception("Unknown tag received: {}.".format(tag))
+
+        data.extend(conn.recv(data_length))
+
+        if tag == 'multi'
+            return
 
         rcv.close()
         conn.close()

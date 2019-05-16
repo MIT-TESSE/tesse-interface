@@ -63,7 +63,7 @@ class Camera(Enum):
 
 class Compression(Enum):
     OFF = 0
-    ON = 0
+    ON = 1
 
 class Channels(Enum):
     THREE = 0
@@ -129,7 +129,7 @@ class SetCameraParametersRequest(object):
         payload.extend(bytearray(struct.pack('i', self.height_in_pixels)))
         payload.extend(bytearray(struct.pack('i', self.width_in_pixels)))
         payload.extend(bytearray(struct.pack('f', self.field_of_view)))
-        payload.extend(bytearray(struct.pack('i', self.camera)))
+        payload.extend(bytearray(struct.pack('i', self.camera.value)))
         return payload
 
 
@@ -148,7 +148,7 @@ class SetCameraPositionRequest(object):
         payload.extend(bytearray(struct.pack('f', self.x)))
         payload.extend(bytearray(struct.pack('f', self.y)))
         payload.extend(bytearray(struct.pack('f', self.z)))
-        payload.extend(bytearray(struct.pack('i', self.camera)))
+        payload.extend(bytearray(struct.pack('i', self.camera.value)))
         return payload
 
 
@@ -179,12 +179,4 @@ class CameraInformation(object):
         self.data = []
 
     def decode(data):
-        self = CameraInformation()
-
-        tag = data[0:4].decode("utf-8")
-        payload_length = struct.unpack("I",data[4:8])[0]
-        payload = bytearray()
-        while( len(payload) < payload_length ):
-            data = conn.recv( payload_length )
-            payload.extend(data)
-        return self
+        pass
