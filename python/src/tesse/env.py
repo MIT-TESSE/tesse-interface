@@ -23,7 +23,7 @@ import struct
 from tesse.msgs import *
 
 class Env(object):
-    def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9000):
+    def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9001):
         self.simulation_ip = simulation_ip
         self.own_ip = own_ip
         self.request_port = request_port
