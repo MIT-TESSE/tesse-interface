@@ -40,20 +40,6 @@ class ImagePublisher:
     except CvBridgeError as e:
       print(e)
 
-def plot(data_response):
-    imgs = data_response.images
-    if(len(imgs) > 1):
-        fig, ax = plt.subplots(1,len(imgs),figsize=(15,10))
-        for i in range(len(imgs)):
-            ax[i].axis('off')
-            ax[i].imshow(imgs[i])
-    else:
-        plt.imshow(imgs[0])
-        plt.axis('off')
-
-    plt.show()
-
-
 def tesse_ros_bridge():
     # Init ROS node, do this before parsing params.
     rospy.init_node('tesse_ros_bridge', anonymous=True)
@@ -66,22 +52,28 @@ def tesse_ros_bridge():
     env = Env(params.client_ip, params.self_ip,
               params.request_port, params.receive_port)
 
+    # Setup image publisher to ROS
     image_publisher = ImagePublisher(params)
 
-    rate = rospy.Rate(10) # 10hz
+    # Create data request packet
+    data_request = DataRequest(cameras=[(Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
+                                        (Camera.RGB_LEFT, Compression.OFF, Channels.SINGLE)])
+
+    rate = rospy.Rate(60) # In Hz
     while not rospy.is_shutdown():
       hello_str = "hello world %s" % rospy.get_time()
       rospy.loginfo(hello_str)
 
       # Query images from Unity
-      data_request = DataRequest(cameras=[(Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
-                                          (Camera.THIRD_PERSON, Compression.OFF, Channels.SINGLE)])
-      data_response = env.request(DataRequest())
+      data_response = env.request(data_request)
       print(data_response.data)
-      plot(data_response)
+      imgs = data_response.images
+      for i in range(len(imgs)):
+        cv2.imshow("Image with Id: %s"%i, imgs[i])
 
-      # Publish image to ROS
+      # Publish images to ROS
 
+      # Wait to visualize image
       cv2.waitKey(1)
       rate.sleep()
 
