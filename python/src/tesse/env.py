@@ -48,7 +48,6 @@ class Env(object):
 
         # Collect data and construct message
         conn, addr = recv.accept()
-        print('addr:', addr)
         data = bytearray(conn.recv(4))
         tag = data[0:4].decode("utf-8")
 
