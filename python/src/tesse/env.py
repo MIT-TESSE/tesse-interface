@@ -38,6 +38,7 @@ class Env(object):
         # Setup receive socket
         recv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         recv.settimeout(timeout)
+        recv.setblocking(1)
         recv.bind((self.own_ip, self.receive_port))
         recv.listen(1)
 
