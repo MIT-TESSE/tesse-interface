@@ -19,8 +19,6 @@
 # this work.
 # **************************************************************************************************
 
-# In[2]:
-
 
 import socket
 import numpy as np
@@ -31,9 +29,6 @@ import random
 import time
 import struct
 import math
-
-
-# In[11]:
 
 
 class simple_tesse_interface:
@@ -86,7 +81,7 @@ class simple_tesse_interface:
         payload.extend( struct.pack("f", dtheta_y) )
                        
         self.request_socket.sendto( payload, (self.client_ip, self.request_port) ) # send to the simulation
-        self.request_socket.close()
+        #self.request_socket.close()
     
     def add_force(self, z_force, y_torque):
         '''
@@ -106,7 +101,7 @@ class simple_tesse_interface:
         payload.extend( struct.pack("f", y_torque) )
         
         self.request_socket.sendto( payload, (self.client_ip, self.request_port) ) # send to the simulation
-        self.request_socket.close()
+        #self.request_socket.close()
         
     def request_images( ids, get_metadata=False):
         '''
@@ -140,7 +135,7 @@ class simple_tesse_interface:
             payload.extend( bytearray(struct.pack('I', 0)) ) 
         
         self.request_socket.sendto( payload, (self.client_ip, self.request_port))
-        self.request_socket.close()
+        #self.request_socket.close()
         
         # from here there is a bunch of networking crap that handles the response
         #from the simulation - the basic gist is that the simulation returns a
@@ -237,6 +232,8 @@ class simple_tesse_interface:
         payload = bytearray()
         payload.extend( tag.encode() )
 
+		self.request_socket.sendto( payload, (client_ip, request_port) )
+
         # listen for response on tcp socket
         payload_header_size = 8
         conn, addr = self.receive_socket.accept()
@@ -261,9 +258,6 @@ class simple_tesse_interface:
         conn.close()
         
         return meta_payload
-
-
-# In[ ]:
 
 
 
