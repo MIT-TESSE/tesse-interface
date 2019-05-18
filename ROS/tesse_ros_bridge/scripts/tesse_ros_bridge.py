@@ -17,6 +17,7 @@ class Params():
     print("Parsing Params")
 
   def parseParams(self):
+    print("No params to parse")
 
 class ImagePublisher:
   def __init__(self, params):
