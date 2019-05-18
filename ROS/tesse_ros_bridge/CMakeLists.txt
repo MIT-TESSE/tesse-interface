@@ -13,6 +13,6 @@ catkin_python_setup()
 
 #cs_install()
 
-cs_install_scripts(scripts/talker.py)
+cs_install_scripts(scripts/tesse_ros_bridge.py)
 
 cs_export()
