@@ -1,5 +1,9 @@
 <launch>
   <node name="tesse_ros_bridge" pkg="tesse_ros_bridge" type="tesse_ros_bridge.py" output="screen">
     <remap from="image_out" to="semantic_img"/>
+    <param name="client_ip" value="127.0.0.1"/>
+    <param name="self_ip" value="127.0.0.1"/>
+    <param name="request_port" value="9000"/>
+    <param name="receive_port" value="9000"/>
   </node>
 </launch>

@@ -17,7 +17,11 @@ class Params():
     print("Parsing Params")
 
   def parseParams(self):
-    print("No params to parse")
+    # For connecting to Unity
+    self.client_ip = rospy.get_param('~client_ip', '127.0.0.1')
+    self.self_ip = rospy.get_param('~self_ip', '127.0.0.1')
+    self.receive_port = rospy.get_param('~receive_port', '9000')
+    self.request_port = rospy.get_param('~request_port', '9000')
 
 class ImagePublisher:
   def __init__(self, params):
@@ -41,14 +45,15 @@ def tesse_ros_bridge():
     # Init ROS node, do this before parsing params.
     rospy.init_node('tesse_ros_bridge', anonymous=True)
 
-    # Setup TESSE/Unity bridge
-    env = Env("127.0.0.1", "127.0.0.1") # hard-coded for now, use ROS params.
-    msg = AddRelativeForceAndTorque(1, 1) #test
-    env.send(msg)
-
     # Parse ROS params.
     params = Params()
     params.parseParams()
+
+    # Setup TESSE/Unity bridge
+    env = Env(params.client_ip, params.self_ip,
+              params.receive_port, params.request_port)
+    msg = AddRelativeForceAndTorque(1, 1) #test
+    env.send(msg)
 
     image_publisher = ImagePublisher(params)
 
