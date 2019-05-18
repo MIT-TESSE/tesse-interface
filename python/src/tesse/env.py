@@ -19,25 +19,26 @@
 #**************************************************************************************************
 
 import socket
+import struct
+from tesse.msgs import *
 
 class Env(object):
-    __request_port__ = 9000
-    __receive_port__ = 9001
-
-    def __init__(self, simulation_ip, own_ip):
+    def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9000):
         self.simulation_ip = simulation_ip
         self.own_ip = own_ip
+        self.request_port = request_port
+        self.receive_port = receive_port
 
     def send(self, msg):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # udp socket
-        s.sendto(msg.encode(), (self.simulation_ip, self.__request_port__))
+        s.sendto(msg.encode(), (self.simulation_ip, self.request_port))
         s.close()
 
     def request(self, msg, timeout=15):
         # Setup receive socket
         recv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         recv.settimeout(timeout)
-        recv.bind((self.own_ip, self.__receive_port__))
+        recv.bind((self.own_ip, self.receive_port))
         recv.listen(1)
 
         # Send request
@@ -45,28 +46,32 @@ class Env(object):
 
         # Collect data and construct message
         conn, addr = recv.accept()
-        data = conn.recv(4)
+        data = bytearray(conn.recv(4))
         tag = data[0:4].decode("utf-8")
 
         if tag == 'mult':
+            img_header_size = 32
             data.extend(conn.recv(8))
-            data_length = struct.unpack("I",data[4:8])[0] + struct.unpack("I",data[8:12])[0]
+            payload_length_imgs = struct.unpack("I",data[4:8])[0]
+            data.extend(conn.recv(payload_length_imgs + img_header_size*len(msg.cameras)))
+            payload_length_meta = struct.unpack("I",data[8:12])[0]
+            data.extend(conn.recv(payload_length_meta))
 
-        elif tag == 'meta' or tag == 'cami':
+        elif tag == 'meta' or tag == 'cami' or tag == 'scni':
             data.extend(conn.recv(4))
             data_length = struct.unpack("I",data[4:8])[0]
+            data = conn.recv(data_length)
 
-        else
+        else:
             raise Exception("Unknown tag received: {}.".format(tag))
 
-        data.extend(conn.recv(data_length))
-
-        if tag == 'multi'
-            return
-
-        rcv.close()
+        recv.close()
         conn.close()
 
+        if tag == 'mult':
+            return DataResponse().decode(data)
+        else:
+            return data.decode("utf-8")
 
 
 
