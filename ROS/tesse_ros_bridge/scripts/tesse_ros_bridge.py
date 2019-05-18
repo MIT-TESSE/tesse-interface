@@ -51,7 +51,7 @@ class ImagePublisher:
         if i < len(self.publishers):
           self.publishers[i].publish(img_msg)
         else:
-          print('There are more images than ROS publishers.')
+          rospy.logwarn('There are more images than ROS publishers!')
       except CvBridgeError as e:
         print(e)
 
@@ -81,9 +81,6 @@ def tesse_ros_bridge():
 
     rate = rospy.Rate(60) # In Hz
     while not rospy.is_shutdown():
-      hello_str = "hello world %s" % rospy.get_time()
-      rospy.loginfo(hello_str)
-
       # Query images from Unity
       data_response = env.request(data_request)
       print(data_response.data)

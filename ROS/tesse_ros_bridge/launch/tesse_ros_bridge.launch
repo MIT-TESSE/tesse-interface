@@ -1,6 +1,9 @@
 <launch>
   <node name="tesse_ros_bridge" pkg="tesse_ros_bridge" type="tesse_ros_bridge.py" output="screen">
-    <remap from="image_out" to="semantic_img"/>
+    <remap from="segmentation" to="segmentation"/>
+    <remap from="rgb_left"     to="rgb_left"/>
+    <remap from="rgb_right"    to="rgb_right"/>
+    <remap from="depth"        to="depth"/>
     <param name="client_ip" value="127.0.0.1"/>
     <param name="self_ip" value="127.0.0.1"/>
     <param name="request_port" value="9000"/>
