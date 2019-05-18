@@ -1,0 +1,5 @@
+<launch>
+  <node name="tesse_ros_bridge" pkg="tesse_ros_bridge" type="tesse_ros_bridge.py" output="screen">
+    <remap from="image_out" to="semantic_img"/>
+  </node>
+</launch>

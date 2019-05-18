@@ -19,6 +19,15 @@ cd TESSE_interface/python
 python setup.py develop
 ```
 
+To use this interface in ROS, you will need to import the package in the ROS folder into your catkin workspace.
+If you have a catkin workspace already set up, just clone this repo in the `src` folder of the catkin worksapce, then:
+
+```
+cd TESSE_interface/python
+python setup.py develop
+catkin build
+```
+
 ## Usage
 
 See (python_demonstration.ipynb)[python_demonstration.ipynb] for example usage of the python package.
