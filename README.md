@@ -2,6 +2,8 @@
 
 Provides a Python interface to the TESSE Unity environment.
 
+Use python 2.7 (to ease usage with ROS)
+
 ## Commands
 Use the following commands when having the Unity window in focus:
 
