@@ -9,6 +9,9 @@ from cv_bridge import CvBridge, CvBridgeError
 
 from tesse_ros_bridge import *
 
+from tesse.msgs import *
+from tesse.env import *
+
 class Params():
   def __init__(self):
     print("Parsing Params")
@@ -37,6 +40,11 @@ def tesse_ros_bridge():
     # Init ROS node, do this before parsing params.
     rospy.init_node('tesse_ros_bridge', anonymous=True)
 
+    # Setup TESSE/Unity bridge
+    env = Env("127.0.0.1", "127.0.0.1") # hard-coded for now, use ROS params.
+    msg = AddRelativeForceAndTorque(1, 1) #test
+    env.send(msg)
+
     # Parse ROS params.
     params = Params()
     params.parseParams()
@@ -47,6 +55,9 @@ def tesse_ros_bridge():
     while not rospy.is_shutdown():
       hello_str = "hello world %s" % rospy.get_time()
       rospy.loginfo(hello_str)
+
+      # Move the object constantly
+      env.send(msg)
 
       cv2.waitKey(1)
       rate.sleep()
