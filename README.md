@@ -8,7 +8,10 @@ Use python 2.7 (to ease usage with ROS)
 Use the following commands when having the Unity window in focus:
 
 - Shift+T: disable keyboard input
-- w,a,s,d: control camera using forces
+- w,a,s,d: control agent using forces
+- x: stops motion of agent.
+- r: respawns agent.
+- ESC: to quit game.
 
 ## Setup
 
