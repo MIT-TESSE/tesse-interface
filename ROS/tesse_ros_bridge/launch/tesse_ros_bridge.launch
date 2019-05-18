@@ -4,6 +4,6 @@
     <param name="client_ip" value="127.0.0.1"/>
     <param name="self_ip" value="127.0.0.1"/>
     <param name="request_port" value="9000"/>
-    <param name="receive_port" value="9000"/>
+    <param name="receive_port" value="9001"/>
   </node>
 </launch>

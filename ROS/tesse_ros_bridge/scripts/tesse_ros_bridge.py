@@ -20,8 +20,8 @@ class Params():
     # For connecting to Unity
     self.client_ip = rospy.get_param('~client_ip', '127.0.0.1')
     self.self_ip = rospy.get_param('~self_ip', '127.0.0.1')
-    self.receive_port = rospy.get_param('~receive_port', '9000')
     self.request_port = rospy.get_param('~request_port', '9000')
+    self.receive_port = rospy.get_param('~receive_port', '9001')
 
 class ImagePublisher:
   def __init__(self, params):
@@ -51,9 +51,7 @@ def tesse_ros_bridge():
 
     # Setup TESSE/Unity bridge
     env = Env(params.client_ip, params.self_ip,
-              params.receive_port, params.request_port)
-    msg = AddRelativeForceAndTorque(1, 1) #test
-    env.send(msg)
+              params.request_port, params.receive_port)
 
     image_publisher = ImagePublisher(params)
 
