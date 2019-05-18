@@ -19,13 +19,37 @@ cd TESSE_interface/python
 python setup.py develop
 ```
 
+### Setup for ROS
 To use this interface in ROS, you will need to import the package in the ROS folder into your catkin workspace.
-If you have a catkin workspace already set up, just clone this repo in the `src` folder of the catkin worksapce, then:
 
 ```
+# Setup catkin workspace
+mkdir -p ~/catkin_ws/src
+cd ~/catkin_ws/
+catkin init
+
+# Add workspace to bashrc.
+echo 'source ~/catkin_ws/devel/setup.bash' >> ~/.bashrc
+
+# Clone repo
+cd src
+git clone git@github.mit.edu:TESS/TESSE_interface.git
+
+# Install dependencies from rosinstall file using wstool
+wstool init
+wstool merge tess_ros_bridge/install/tess_ros_bridge.rosinstall
+wstool update
+
+# Source TESSE non-ROS code
 cd TESSE_interface/python
 python setup.py develop
+cd ../..
+
+# Compile code
 catkin build
+
+# Refresh workspace
+source ~/.bashrc
 ```
 
 ## Usage
