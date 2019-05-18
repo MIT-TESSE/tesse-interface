@@ -86,7 +86,11 @@ class TesseROSWrapper:
             metadata = self.parse_metadata(data_response.data)
 
             for i in range(len(self.cameras)):
-                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'bgr8')
+                if i < 2: # for the RGB to GRY conversion
+                    img_gray = cv2.cvtColor(data_response.images[i], cv2.COLOR_BGR2GRAY)
+                    img_msg = self.bridge.cv2_to_imgmsg(img_gray, 'mono8')
+                else:
+                    img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'bgr8')
                 img_msg.header.stamp = rospy.Time(metadata['time'])
                 self.image_publishers[i].publish(img_msg)
 
