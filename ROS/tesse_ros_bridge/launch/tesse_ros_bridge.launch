@@ -11,4 +11,13 @@
     <param name="request_port" value="9000"/>
     <param name="receive_port" value="9001"/>
   </node>
+
+  <!-- Convert it into a point cloud -->
+  <node pkg="nodelet" type="nodelet" name="cloudify"
+        args="load depth_image_proc/point_cloud_xyzrgb record_player_manager --no-bond">
+    <remap from="depth_registered/image_rect" to="depth"/>
+    <remap from="depth_registered/points"     to="points"/>
+    <remap from="rgb/image_rect_color"        to="segmentation"/>
+    <remap from="rgb/camera_info"             to="left_cam/camera_info"/>
+  </node>
 </launch>

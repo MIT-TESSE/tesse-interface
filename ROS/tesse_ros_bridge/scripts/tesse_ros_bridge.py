@@ -6,7 +6,7 @@ import cv2
 import rospy
 import tf
 from std_msgs.msg import Header
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CameraInfo
 from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -14,6 +14,22 @@ import tesse_ros_bridge
 
 from tesse.msgs import *
 from tesse.env import *
+
+#### The following should be in a utilities.py file ###########
+def make_camera_msg(width, height, fx, fy, cx, cy):
+  camera_info_msg = CameraInfo()
+  camera_info_msg.width = width
+  camera_info_msg.height = height
+  camera_info_msg.K = [fx, 0, cx,
+                        0, fy, cy,
+                        0, 0, 1]
+
+  camera_info_msg.D = [0, 0, 0, 0]
+
+  camera_info_msg.P = [fx, 0, cx, 0,
+                        0, fy, cy, 0,
+                        0, 0, 1, 0]
+  return camera_info_msg
 
 def parse_metadata(data):
   """ Parse metadata into a useful dictionary """
@@ -70,10 +86,11 @@ def metadata_to_odom(metadata):
   odom.twist.twist.angular.z = metadata['ang_vel'][2]
 
   return odom
+###############################################################
 
 class Params():
   def __init__(self):
-    print("Parsing Params")
+    pass
 
   def parseParams(self):
     # For connecting to Unity
@@ -147,6 +164,11 @@ def tesse_ros_bridge():
     # Create ROS image publishers
     image_pub = ImagePublisher(cameras)
 
+    # Create camera info publishers
+    cam_info = rospy.Publisher("left_cam/camera_info", CameraInfo, queue_size = 10)
+    generate_cam_info_done = False # Flag to compute msg only once.
+    cam_info_msg = CameraInfo()
+
     # Create Pose publisher
     gt_odom_pub = rospy.Publisher("ground_truth_odometry", Odometry, queue_size = 10)
 
@@ -156,9 +178,16 @@ def tesse_ros_bridge():
     # Create data request packet
     data_request = DataRequest(True, cameras);
 
+    # TODO use Timers instead
     rate = rospy.Rate(30) # In Hz
     while not rospy.is_shutdown():
       # GO AS FAST AS POSSIBLE HERE
+
+      # Create cam info message. Do only once.
+      if generate_cam_info_done:
+        cam_info = env.request(CameraInformationRequest()))
+        cam_info_msg = make_camera_msg(parse_cam_info_metadata(cam_info))
+      cam_info.publish(cam_info_msg)
 
       # Query images from Unity
       data_response = env.request(data_request)
