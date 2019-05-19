@@ -11,6 +11,7 @@ Use the following commands when having the Unity window in focus:
 - w,a,s,d: control agent using forces
 - x: stops motion of agent.
 - r: respawns agent.
+- 'left ctrl + left shift + g': enter spawn point capture mode for next respawn: press 'r' until you get to a nice location, then enter capture mode so that Unity restarts where you left. Note that in this mode, it'll capture a new point every second while moving around. You can stop capturing using 'left ctrl + left shift + g'.
 - ESC: to quit game.
 
 ## Setup
