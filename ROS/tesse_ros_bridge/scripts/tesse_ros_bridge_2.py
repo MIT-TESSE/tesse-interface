@@ -48,7 +48,7 @@ class TesseROSWrapper:
         self.image_rate = 20
         self.speedup_factor = 20 # for simulated time
 
-        self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
+        self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.SINGLE),
                  (Camera.RGB_RIGHT, Compression.OFF, Channels.SINGLE),
                  (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
                  (Camera.DEPTH, Compression.OFF, Channels.THREE)]
@@ -80,16 +80,15 @@ class TesseROSWrapper:
         publish_factor = int(self.imu_rate/self.image_rate)
 
         if self.imu_counter >= publish_factor:
-            data_request = DataRequest(self.cameras)
+            data_request = DataRequest(metadata=True, cameras=self.cameras)
             data_response = self.env.request(data_request)
 
             metadata = self.parse_metadata(data_response.data)
 
             for i in range(len(self.cameras)):
-                if i < 2: # for the RGB to GRY conversion
-                    img_gray = cv2.cvtColor(data_response.images[i], cv2.COLOR_BGR2GRAY)
-                    img_msg = self.bridge.cv2_to_imgmsg(img_gray, 'mono8')
-                else:
+                if self.cameras[i][2] == Channels.SINGLE:
+                    img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'mono8')
+                elif self.cameras[i][2] == Channels.THREE:
                     img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'bgr8')
                 img_msg.header.stamp = rospy.Time(metadata['time'])
                 self.image_publishers[i].publish(img_msg)
