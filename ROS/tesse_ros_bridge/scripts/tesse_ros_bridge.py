@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import math
 import numpy as np
 import cv2
 
@@ -9,6 +10,7 @@ from std_msgs.msg import Header
 from sensor_msgs.msg import Image, CameraInfo
 from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge, CvBridgeError
+from rosgraph_msgs.msg import Clock
 
 import tesse_ros_bridge
 
@@ -16,18 +18,25 @@ from tesse.msgs import *
 from tesse.env import *
 
 #### The following should be in a utilities.py file ###########
-def make_camera_msg(width, height, fx, fy, cx, cy):
+def make_camera_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
   camera_info_msg = CameraInfo()
+  camera_info_msg.header.frame_id = frame_id
   camera_info_msg.width = width
   camera_info_msg.height = height
   camera_info_msg.K = [fx, 0, cx,
                         0, fy, cy,
                         0, 0, 1]
-
+  # No rectification
+  camera_info_msg.R = [1, 0, 0,
+                       0, 1, 0,
+                       0, 0, 1]
+  # No distortion
+  camera_info_msg.distortion_model = "plumb_bob"
   camera_info_msg.D = [0, 0, 0, 0]
 
-  camera_info_msg.P = [fx, 0, cx, 0,
-                        0, fy, cy, 0,
+  # Ty = 0 and Tx = -fx' * B, where B is the baseline between the cameras.
+  camera_info_msg.P = [fx, 0, cx, Tx,
+                        0, fy, cy, Ty,
                         0, 0, 1, 0]
   return camera_info_msg
 
@@ -57,12 +66,12 @@ def parse_metadata(data):
 
   return dict
 
-def metadata_to_odom(metadata):
+def metadata_to_odom(timestamp, metadata):
   """ Transforms a metadata message to a ROS odometry message.
   Requires a transform from body to map. (TODO remove hardcoded frame_id)
   """
   header = Header()
-  header.stamp = rospy.Time(metadata['time'])
+  header.stamp = timestamp
   odom = Odometry()
   odom.header = header
   odom.header.frame_id = "world"
@@ -99,6 +108,10 @@ class Params():
     self.request_port = rospy.get_param('~request_port', '9000')
     self.receive_port = rospy.get_param('~receive_port', '9001')
 
+    # Simulation time
+    self.use_sim = rospy.get_param('/use_sim_time', False)
+    self.speedup_factor = rospy.get_param('~speedup_factor', 1)
+
 class ImagePublisher:
   def __init__(self, cameras):
     # Store params
@@ -117,7 +130,7 @@ class ImagePublisher:
 
     self.bridge = CvBridge()
 
-  def publish(self, img_stamp, cv_images):
+  def publish(self, timestamp, cv_images):
     # cv_images must be in the same order as the publishers!
     # TODO use a dictionary for Camera, instead of enum, in msgs.py
     # to avoid this potential issue
@@ -128,11 +141,11 @@ class ImagePublisher:
         if cam_channels == Channels.SINGLE:
           img_msg = self.bridge.cv2_to_imgmsg(cv_images[i], "mono8")
         elif cam_channels == Channels.THREE:
-          img_msg = self.bridge.cv2_to_imgmsg(cv_images[i], "rgb8")
+          img_msg = self.bridge.cv2_to_imgmsg(cv_images[i], "bgr8")
         else:
           rospy.logerr('Wrong number of channels for camera: %i' % i)
 
-        img_msg.header.stamp = rospy.Time(img_stamp)
+        img_msg.header.stamp = timestamp
 
         # Publish each image using the corresponding publisher.
         if i < self.len_publishers:
@@ -142,6 +155,11 @@ class ImagePublisher:
 
       except CvBridgeError as e:
         print(e)
+
+def clock_cb(event):
+  #sim_time = rospy.Time.from_sec(time / speedup_factor)
+  #clock_pub.publish(sim_time)
+  pass
 
 def tesse_ros_bridge():
     # Init ROS node, do this before parsing params.
@@ -165,12 +183,32 @@ def tesse_ros_bridge():
     image_pub = ImagePublisher(cameras)
 
     # Create camera info publishers
-    cam_info = rospy.Publisher("left_cam/camera_info", CameraInfo, queue_size = 10)
+    cam_info_left = rospy.Publisher("left_cam/camera_info", CameraInfo, queue_size = 10)
+    cam_info_right = rospy.Publisher("right_cam/camera_info", CameraInfo, queue_size = 10)
     generate_cam_info_done = False # Flag to compute msg only once.
-    cam_info_msg = CameraInfo()
+    width = 640 #pixels
+    height = 480 #pixels
+    fov = 37.84929
+    f = (height / 2.0) / math.tan((math.pi * (fov / 180.0)) / 2.0);
+    fx = f #pixels
+    fy = f #pixels
+    cx = width / 2 #pixels
+    cy = height / 2 #pixels
+    baseline = 0.1
+    Tx = 0
+    Tx_right = -f * baseline ; # -fx' * B
+    Ty = 0
+
+    cam_info_msg_left = make_camera_msg("left_cam", width, height, fx, fy, cx, cy, Tx, Ty)
+    cam_info_msg_right = make_camera_msg("right_cam", width, height, fx, fy, cx, cy, Tx_right, Ty)
 
     # Create Pose publisher
     gt_odom_pub = rospy.Publisher("ground_truth_odometry", Odometry, queue_size = 10)
+
+    # Setup simulation time if requested
+    if params.use_sim:
+        clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
+        clock_timer = rospy.Timer(rospy.Duration(1.0/1000.0), clock_cb)
 
     # Create Tf publisher
     br = tf.TransformBroadcaster()
@@ -183,28 +221,39 @@ def tesse_ros_bridge():
     while not rospy.is_shutdown():
       # GO AS FAST AS POSSIBLE HERE
 
-      # Create cam info message. Do only once.
-      if generate_cam_info_done:
-        cam_info = env.request(CameraInformationRequest()))
-        cam_info_msg = make_camera_msg(parse_cam_info_metadata(cam_info))
-      cam_info.publish(cam_info_msg)
-
       # Query images from Unity
       data_response = env.request(data_request)
       metadata = parse_metadata(data_response.data)
+      #timestamp = rospy.Time(metadata['time'])
+      timestamp = rospy.Time.now()
+
+      # Simulate time in ROS
+      if params.use_sim:
+        sim_time = rospy.Time.from_sec(metadata['time'] / params.speedup_factor)
+        clock_pub.publish(sim_time)
+
+      # Create cam info message. Do only once.
+      #print(env.request(CameraInformationRequest()))
+      #if generate_cam_info_done:
+        #cam_info = env.request(CameraInformationRequest()))
+        #cam_info_msg = make_camera_msg(parse_cam_info_metadata(cam_info))
+      cam_info_msg_left.header.stamp = timestamp
+      cam_info_msg_right.header.stamp = timestamp
+      cam_info_left.publish(cam_info_msg_left)
+      cam_info_right.publish(cam_info_msg_right)
 
       # Publish images to ROS
-      image_pub.publish(metadata['time'], data_response.images)
+      image_pub.publish(timestamp, data_response.images)
 
       # TODO publish cam info as well
 
       # Publish pose (Not necessary)
-      # gt_odom_pub.publish(metadata_to_odom(metadata))
+      # gt_odom_pub.publish(metadata_to_odom(timestamp, metadata))
 
       # Publish tf
       br.sendTransform(metadata['position'],
                        metadata['quaternion'],
-                       rospy.Time(metadata['time']),
+                       timestamp,
                        "base_link", "world") # Convention TFs
 
       # Wait to keep desired frames per second.
