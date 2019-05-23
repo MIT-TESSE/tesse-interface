@@ -1,4 +1,4 @@
-#**************************************************************************************************
+###################################################################################################
 # Distribution authorized to U.S. Government agencies and their contractors. Other requests for
 # this document shall be referred to the MIT Lincoln Laboratory Technology Office.
 #
@@ -16,11 +16,13 @@
 # are defined by DFARS 252.227-7013 or DFARS 252.227-7014 as detailed above. Use of this work other
 # than as specifically authorized by the U.S. Government may violate any copyrights that exist in
 # this work.
-#**************************************************************************************************
+###################################################################################################
 
 import socket
 import struct
-from tesse.msgs import *
+
+from tesse.msgs import DataResponse
+
 
 class Env(object):
     def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9000):
@@ -30,7 +32,7 @@ class Env(object):
         self.receive_port = receive_port
 
     def send(self, msg):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # udp socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # udp socket
         s.sendto(msg.encode(), (self.simulation_ip, self.request_port))
         s.close()
 
@@ -53,14 +55,14 @@ class Env(object):
         if tag == 'mult':
             img_header_size = 32
             data.extend(conn.recv(8))
-            payload_length_imgs = struct.unpack("I",data[4:8])[0]
+            payload_length_imgs = struct.unpack("I", data[4:8])[0]
             data.extend(conn.recv(payload_length_imgs + img_header_size*len(msg.cameras)))
-            payload_length_meta = struct.unpack("I",data[8:12])[0]
+            payload_length_meta = struct.unpack("I", data[8:12])[0]
             data.extend(conn.recv(payload_length_meta))
 
         elif tag == 'meta' or tag == 'cami' or tag == 'scni':
             data.extend(conn.recv(4))
-            data_length = struct.unpack("I",data[4:8])[0]
+            data_length = struct.unpack("I", data[4:8])[0]
             data = conn.recv(data_length)
 
         else:
@@ -73,6 +75,3 @@ class Env(object):
             return DataResponse().decode(data)
         else:
             return data.decode("utf-8")
-
-
-

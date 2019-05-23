@@ -1,4 +1,4 @@
-#**************************************************************************************************
+###################################################################################################
 # Distribution authorized to U.S. Government agencies and their contractors. Other requests for
 # this document shall be referred to the MIT Lincoln Laboratory Technology Office.
 #
@@ -16,11 +16,13 @@
 # are defined by DFARS 252.227-7013 or DFARS 252.227-7014 as detailed above. Use of this work other
 # than as specifically authorized by the U.S. Government may violate any copyrights that exist in
 # this work.
-#**************************************************************************************************
+###################################################################################################
 
 from enum import Enum
 import struct
+
 import numpy as np
+
 
 class Transform(object):
     __tag__ = 'TLPT'
@@ -32,7 +34,7 @@ class Transform(object):
 
     def encode(self):
         payload = bytearray()
-        payload.extend( self.__tag__.encode() )
+        payload.extend(self.__tag__.encode())
         payload.extend(struct.pack("f", self.translate_x))
         payload.extend(struct.pack("f", self.translate_z))
         payload.extend(struct.pack("f", self.rotate_y))
@@ -71,22 +73,26 @@ class Camera(Enum):
     DEPTH = 3
     THIRD_PERSON = 4
 
+
 class Compression(Enum):
     OFF = 0
     ON = 1
+
 
 class Channels(Enum):
     THREE = 0
     SINGLE = 1
 
+
 class DataRequest(object):
-    def __init__(self, metadata=True,
-                       cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
-                                (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
-                                (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
-                                (Camera.DEPTH, Compression.OFF, Channels.THREE),
-                                (Camera.THIRD_PERSON, Compression.OFF, Channels.THREE)
-                                ]):
+    def __init__(self,
+                 metadata=True,
+                 cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
+                          (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
+                          (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
+                          (Camera.DEPTH, Compression.OFF, Channels.THREE),
+                          (Camera.THIRD_PERSON, Compression.OFF, Channels.THREE)
+                          ]):
         self.metadata = metadata
         self.cameras = cameras
 
@@ -99,9 +105,9 @@ class DataRequest(object):
             payload.extend('rIMG'.encode())
 
         for camera in self.cameras:
-            payload.extend(bytearray(struct.pack('I', camera[0].value))) # Camera
-            payload.extend(bytearray(struct.pack('I', camera[1].value))) # Compression
-            payload.extend(bytearray(struct.pack('I', camera[2].value))) # Channels
+            payload.extend(bytearray(struct.pack('I', camera[0].value)))  # Camera
+            payload.extend(bytearray(struct.pack('I', camera[1].value)))  # Compression
+            payload.extend(bytearray(struct.pack('I', camera[2].value)))  # Channels
 
         return payload
 
@@ -114,9 +120,9 @@ class DataResponse(object):
         self.types = []
 
     def decode(self, data):
-        (tag, data) = (data[:4].decode("utf-8"), data[4:])
-        (payload_length_imgs, data) = (struct.unpack("I",data[:4])[0], data[4:])
-        (payload_length_meta, data) = (struct.unpack("I",data[:4])[0], data[4:])
+        _, data = (data[:4].decode("utf-8"), data[4:])
+        payload_length_imgs, data = (struct.unpack("I", data[:4])[0], data[4:])
+        _, data = (struct.unpack("I", data[:4])[0], data[4:])
 
         self.data = data[payload_length_imgs:].decode("utf-8")
         (self.images, self.cameras, self.type) = self.decode_images(data[:payload_length_imgs])
@@ -126,24 +132,24 @@ class DataResponse(object):
     def decode_images(self, data):
         (images, cameras, types) = ([], [], [])
         while len(data) > 0:
-            (message_type, data) = (data[:4].decode("utf-8"), data[4:])
-            (img_payload_length, data) = (struct.unpack("I",data[:4])[0], data[4:])
-            (img_width, data) = (struct.unpack("I",data[:4])[0], data[4:])
-            (img_height, data) = (struct.unpack("I",data[:4])[0], data[4:])
-            (cam_id, data) = (struct.unpack("I",data[:4])[0], data[4:])
-            (img_type, data) = (data[:4].decode("utf-8"), data[4:])
+            _, data = (data[:4].decode("utf-8"), data[4:])
+            img_payload_length, data = (struct.unpack("I", data[:4])[0], data[4:])
+            img_width, data = (struct.unpack("I", data[:4])[0], data[4:])
+            img_height, data = (struct.unpack("I", data[:4])[0], data[4:])
+            cam_id, data = (struct.unpack("I", data[:4])[0], data[4:])
+            img_type, data = (data[:4].decode("utf-8"), data[4:])
             data = data[8:]  # Why?
-            
+
             # Pull out image
-            if( img_type == 'xRGB' ):
-                img = np.flip(np.ndarray((img_height,img_width,3),buffer=data[:img_payload_length],dtype='uint8'),0)
-            elif( img_type == 'xGRY' ):
-                img = np.flip(np.ndarray((img_height,img_width),buffer=data[:img_payload_length],dtype='uint8'),0)
-            elif( img_type == 'cRGB'):
+            if img_type == 'xRGB':
+                img = np.flip(np.ndarray((img_height, img_width, 3), buffer=data[:img_payload_length], dtype='uint8'), 0)
+            elif img_type == 'xGRY':
+                img = np.flip(np.ndarray((img_height, img_width), buffer=data[:img_payload_length], dtype='uint8'), 0)
+            elif img_type == 'cRGB':
                 import cv2
                 ndarr = np.frombuffer(data[:img_payload_length], dtype=np.uint8)
                 img = cv2.imdecode(ndarr, cv2.IMREAD_UNCHANGED)
-                img = img[:,:,[2,1,0]]
+                img = img[:, :, [2, 1, 0]]
 
             data = data[img_payload_length:]
 
@@ -151,9 +157,7 @@ class DataResponse(object):
             cameras.append(cam_id)
             types.append(img_type)
 
-
-        return (images, cameras, types)
-
+        return images, cameras, types
 
 
 class MetadataRequest(object):
