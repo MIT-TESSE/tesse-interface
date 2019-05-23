@@ -20,6 +20,7 @@
 
 from enum import Enum
 import struct
+
 import numpy as np
 
 
@@ -84,7 +85,8 @@ class Channels(Enum):
 
 
 class DataRequest(object):
-    def __init__(self, metadata=True,
+    def __init__(self,
+                 metadata=True,
                  cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
                           (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
                           (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),

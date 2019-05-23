@@ -20,6 +20,7 @@
 
 import socket
 import struct
+
 from tesse.msgs import DataResponse
 
 
