@@ -7,7 +7,7 @@
 # or recommendations expressed in this material are those of the author(s) and do not necessarily
 # reflect the views of the Under Secretary of Defense for Research and Engineering.
 #
-# © 2019 Massachusetts Institute of Technology.
+# (c) 2019 Massachusetts Institute of Technology.
 #
 # The software/firmware is provided to you on an As-Is basis
 #
@@ -25,7 +25,7 @@ from tesse.msgs import DataResponse
 
 
 class Env(object):
-    def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9000):
+    def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9001):
         self.simulation_ip = simulation_ip
         self.own_ip = own_ip
         self.request_port = request_port
@@ -36,42 +36,62 @@ class Env(object):
         s.sendto(msg.encode(), (self.simulation_ip, self.request_port))
         s.close()
 
-    def request(self, msg, timeout=15):
-        # Setup receive socket
+    def request(self, msg, timeout=1):
+        # setup receive socket
         recv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        recv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         recv.settimeout(timeout)
-        recv.setblocking(1)
         recv.bind((self.own_ip, self.receive_port))
         recv.listen(1)
 
-        # Send request
+        # send request
         self.send(msg)
 
-        # Collect data and construct message
-        conn, addr = recv.accept()
-        data = bytearray(conn.recv(4))
-        tag = data[0:4].decode("utf-8")
+        # wait for a connection
+        try:
+            conn, addr = recv.accept()
+            conn.setblocking(1)
+        except socket.timeout:
+            recv.close()
+            return
 
+        # get message tag
+        tag = conn.recv(4).decode('utf-8')
+        if tag not in ['mult', 'meta', 'cami', 'scni']:
+            raise ValueError('Unknown tag received {}'.format(tag))
+
+        # get maximum message payload length
         if tag == 'mult':
-            img_header_size = 32
-            data.extend(conn.recv(8))
-            payload_length_imgs = struct.unpack("I", data[4:8])[0]
-            data.extend(conn.recv(payload_length_imgs + img_header_size*len(msg.cameras)))
-            payload_length_meta = struct.unpack("I", data[8:12])[0]
-            data.extend(conn.recv(payload_length_meta))
-
-        elif tag == 'meta' or tag == 'cami' or tag == 'scni':
-            data.extend(conn.recv(4))
-            data_length = struct.unpack("I", data[4:8])[0]
-            data = conn.recv(data_length)
-
+            header = conn.recv(8)
+            payload_length_imgs = struct.unpack("I", header[:4])[0]
+            payload_length_meta = struct.unpack("I", header[4:])[0]
+            max_payload_length = payload_length_imgs + payload_length_meta
         else:
-            raise Exception("Unknown tag received: {}.".format(tag))
+            header = conn.recv(4)
+            max_payload_length = struct.unpack("I", header)[0]
 
-        recv.close()
+        # allocate payload buffer
+        payload = bytearray(max_payload_length)
+
+        # get payload
+        total_bytes_read = 0
+        payload_view = memoryview(payload)
+        while total_bytes_read < max_payload_length:
+            bytes_read = conn.recv_into(payload_view, max_payload_length - total_bytes_read)
+            if bytes_read == 0:
+                break
+            payload_view = payload_view[bytes_read:]
+            total_bytes_read += bytes_read
+        payload_view = memoryview(payload)[:total_bytes_read]
+
+        # close socket
         conn.close()
+        recv.close()
 
+        # parse payload buffer
         if tag == 'mult':
-            return DataResponse().decode(data)
+            imgs_payload = payload_view[:-payload_length_meta]
+            meta_payload = payload_view[-payload_length_meta:]
+            return DataResponse(images=imgs_payload, metadata=meta_payload)
         else:
-            return data.decode("utf-8")
+            return DataResponse(metadata=payload_view)
