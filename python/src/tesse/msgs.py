@@ -44,6 +44,12 @@ class Channels(Enum):
     SINGLE = 1
 
 
+class Interface(Enum):
+    POSITION = 0
+    METADATA = 1
+    IMAGE = 2
+
+
 class AbstractMessage:
     __metaclass__ = ABCMeta
 
@@ -57,24 +63,34 @@ class AbstractMessage:
             payload.extend(struct.pack(*attribute))
         return payload
 
+    def get_interface(self):
+        return self.__interface__
+
 
 # POSITION INTERFACE
 
-class Transform(AbstractMessage):
+class PositionMessage(AbstractMessage):
+    __interface__ = Interface.POSITION
+
+    def __init__(self, *message_contents):
+        super(PositionMessage, self).__init__(*message_contents)
+
+
+class Transform(PositionMessage):
     __tag__ = 'TLPT'
 
     def __init__(self, translate_x=0, translate_z=0, rotate_y=0):
         super(Transform, self).__init__(('f', translate_x), ('f', translate_z), ('f', rotate_y))
 
 
-class AddRelativeForceAndTorque(AbstractMessage):
+class AddRelativeForceAndTorque(PositionMessage):
     __tag__ = 'xBFF'
 
     def __init__(self, force_z=0, torque_y=0):
         super(AddRelativeForceAndTorque, self).__init__(('f', force_z), ('f', torque_y))
 
 
-class Reposition(AbstractMessage):
+class Reposition(PositionMessage):
     __tag__ = 'sPoS'
 
     def __init__(self, position_x=0, position_y=0, position_z=0, orientation_x=0, orientation_y=0, orientation_z=0, orientation_w=0):
@@ -89,11 +105,11 @@ class Reposition(AbstractMessage):
         )
 
 
-class Respawn(AbstractMessage):
+class Respawn(PositionMessage):
     __tag__ = 'RSPN'
 
 
-class SceneRequest(AbstractMessage):
+class SceneRequest(PositionMessage):
     __tag__ = 'CScN'
 
     def __init__(self, index=0):
@@ -102,13 +118,27 @@ class SceneRequest(AbstractMessage):
 
 # METADATA INTERFACE
 
-class MetadataRequest(AbstractMessage):
+class MetadataMessage(AbstractMessage):
+    __interface__ = Interface.METADATA
+
+    def __init__(self, *message_contents):
+        super(MetadataMessage, self).__init__(*message_contents)
+
+
+class MetadataRequest(MetadataMessage):
     __tag__ = 'rMET'
 
 
 # IMAGE INTERFACE
 
-class DataRequest(AbstractMessage):
+class ImageMessage(AbstractMessage):
+    __interface__ = Interface.IMAGE
+
+    def __init__(self, *message_contents):
+        super(ImageMessage, self).__init__(*message_contents)
+
+
+class DataRequest(ImageMessage):
     def __init__(self,
                  metadata=True,
                  cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
@@ -133,28 +163,28 @@ class DataRequest(AbstractMessage):
                 raise ValueError('Invalid camera configuration')
 
 
-class CameraInformationRequest(AbstractMessage):
+class CameraInformationRequest(ImageMessage):
     __tag__ = 'gCaI'
 
     def __init__(self, camera=Camera.ALL):
         super(CameraInformationRequest, self).__init__(('i', camera.value))
 
 
-class SetCameraParametersRequest(AbstractMessage):
+class SetCameraParametersRequest(ImageMessage):
     __tag__ = 'sCaR'
 
     def __init__(self, height_in_pixels=320, width_in_pixels=480, field_of_view=60, camera=Camera.ALL):
         super(SetCameraParametersRequest, self).__init__(('i', height_in_pixels), ('i', width_in_pixels), ('f', field_of_view), ('i', camera.value))
 
 
-class SetCameraPositionRequest(AbstractMessage):
+class SetCameraPositionRequest(ImageMessage):
     __tag__ = 'sCaP'
 
     def __init__(self, x=0, y=0, z=0, camera=Camera.ALL):
         super(SetCameraPositionRequest, self).__init__(('f', x), ('f', y), ('f', z), ('i', camera.value))
 
 
-class SetCameraOrientationRequest(AbstractMessage):
+class SetCameraOrientationRequest(ImageMessage):
     __tag__ = 'sCaQ'
 
     def __init__(self, x=0, y=0, z=0, w=1, camera=Camera.ALL):

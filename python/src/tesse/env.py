@@ -21,19 +21,30 @@
 import socket
 import struct
 
+from tesse.msgs import Interface
 from tesse.msgs import DataResponse
 
 
 class Env(object):
-    def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9001):
+    def __init__(self, simulation_ip, own_ip, position_port=9000, metadata_port=9001, image_port=9002):
         self.simulation_ip = simulation_ip
         self.own_ip = own_ip
-        self.request_port = request_port
-        self.receive_port = receive_port
+        self.position_port = position_port
+        self.metadata_port = metadata_port
+        self.image_port = image_port
+
+    def get_port(self, msg):
+        if msg.get_interface() == Interface.POSITION:
+            port = self.position_port
+        elif msg.get_interface() == Interface.METADATA:
+            port = self.metadata_port
+        else:
+            port = self.image_port
+        return port
 
     def send(self, msg):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # udp socket
-        s.sendto(msg.encode(), (self.simulation_ip, self.request_port))
+        s.sendto(msg.encode(), (self.simulation_ip, self.get_port(msg)))
         s.close()
 
     def request(self, msg, timeout=1):
@@ -41,7 +52,7 @@ class Env(object):
         recv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         recv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         recv.settimeout(timeout)
-        recv.bind((self.own_ip, self.receive_port))
+        recv.bind((self.own_ip, self.get_port(msg)))
         recv.listen(1)
 
         # send request
