@@ -77,15 +77,15 @@ class AddRelativeForceAndTorque(AbstractMessage):
 class Move(AbstractMessage):
     __tag__ = 'sPoS'
 
-    def __init__(self, pos_x=0, pos_y=0, pos_z=0, rot_x=0, rot_y=0, rot_z=0, rot_w=0):
+    def __init__(self, position_x=0, position_y=0, position_z=0, orientation_x=0, orientation_y=0, orientation_z=0, orientation_w=0):
         super(Move, self).__init__(
-            ('f', pos_x),
-            ('f', pos_y),
-            ('f', pos_z),
-            ('f', rot_x),
-            ('f', rot_y),
-            ('f', rot_z),
-            ('f', rot_w),
+            ('f', position_x),
+            ('f', position_y),
+            ('f', position_z),
+            ('f', orientation_x),
+            ('f', orientation_y),
+            ('f', orientation_z),
+            ('f', orientation_w),
         )
 
 
