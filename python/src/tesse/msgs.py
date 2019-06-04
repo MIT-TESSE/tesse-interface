@@ -74,7 +74,7 @@ class AddRelativeForceAndTorque(AbstractMessage):
         super(AddRelativeForceAndTorque, self).__init__(('f', force_z), ('f', torque_y))
 
 
-class Move(AbstractMessage):
+class Reposition(AbstractMessage):
     __tag__ = 'sPoS'
 
     def __init__(self, position_x=0, position_y=0, position_z=0, orientation_x=0, orientation_y=0, orientation_z=0, orientation_w=0):
