@@ -74,6 +74,21 @@ class AddRelativeForceAndTorque(AbstractMessage):
         super(AddRelativeForceAndTorque, self).__init__(('f', force_z), ('f', torque_y))
 
 
+class Move(AbstractMessage):
+    __tag__ = 'sPoS'
+
+    def __init__(self, pos_x=0, pos_y=0, pos_z=0, rot_x=0, rot_y=0, rot_z=0, rot_w=0):
+        super(Move, self).__init__(
+            ('f', pos_x),
+            ('f', pos_y),
+            ('f', pos_z),
+            ('f', rot_x),
+            ('f', rot_y),
+            ('f', rot_z),
+            ('f', rot_w),
+        )
+
+
 class Respawn(AbstractMessage):
     __tag__ = 'RSPN'
 
