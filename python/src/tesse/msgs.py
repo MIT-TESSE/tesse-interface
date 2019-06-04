@@ -78,7 +78,7 @@ class Reposition(AbstractMessage):
     __tag__ = 'sPoS'
 
     def __init__(self, position_x=0, position_y=0, position_z=0, orientation_x=0, orientation_y=0, orientation_z=0, orientation_w=0):
-        super(Move, self).__init__(
+        super(Reposition, self).__init__(
             ('f', position_x),
             ('f', position_y),
             ('f', position_z),
