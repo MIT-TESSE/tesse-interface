@@ -18,43 +18,11 @@
 # this work.
 ###################################################################################################
 
-from abc import ABCMeta
-from enum import Enum
 import struct
-
 import numpy as np
 
-
-class AbstractMessage:
-    __metaclass__ = ABCMeta
-
-    def __init__(self, *message_contents):
-        self.message_contents = message_contents
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        for attribute in self.message_contents:
-            payload.extend(struct.pack(*attribute))
-        return payload
-
-
-class Transform(AbstractMessage):
-    __tag__ = 'TLPT'
-
-    def __init__(self, translate_x=0, translate_z=0, rotate_y=0):
-        super(Transform, self).__init__(('f', translate_x), ('f', translate_z), ('f', rotate_y))
-
-
-class AddRelativeForceAndTorque(AbstractMessage):
-    __tag__ = 'xBFF'
-
-    def __init__(self, force_z=0, torque_y=0):
-        super(AddRelativeForceAndTorque, self).__init__(('f', force_z), ('f', torque_y))
-
-
-class Respawn(AbstractMessage):
-    __tag__ = 'RSPN'
+from abc import ABCMeta
+from enum import Enum
 
 
 class Camera(Enum):
@@ -75,6 +43,55 @@ class Channels(Enum):
     THREE = 0
     SINGLE = 1
 
+
+class AbstractMessage:
+    __metaclass__ = ABCMeta
+
+    def __init__(self, *message_contents):
+        self.message_contents = message_contents
+
+    def encode(self):
+        payload = bytearray()
+        payload.extend(self.__tag__.encode())
+        for attribute in self.message_contents:
+            payload.extend(struct.pack(*attribute))
+        return payload
+
+
+# POSITION INTERFACE
+
+class Transform(AbstractMessage):
+    __tag__ = 'TLPT'
+
+    def __init__(self, translate_x=0, translate_z=0, rotate_y=0):
+        super(Transform, self).__init__(('f', translate_x), ('f', translate_z), ('f', rotate_y))
+
+
+class AddRelativeForceAndTorque(AbstractMessage):
+    __tag__ = 'xBFF'
+
+    def __init__(self, force_z=0, torque_y=0):
+        super(AddRelativeForceAndTorque, self).__init__(('f', force_z), ('f', torque_y))
+
+
+class Respawn(AbstractMessage):
+    __tag__ = 'RSPN'
+
+
+class SceneRequest(AbstractMessage):
+    __tag__ = 'CScN'
+
+    def __init__(self, index=0):
+        super(SceneRequest, self).__init__(('i', index))
+
+
+# METADATA INTERFACE
+
+class MetadataRequest(AbstractMessage):
+    __tag__ = 'rMET'
+
+
+# IMAGE INTERFACE
 
 class DataRequest(AbstractMessage):
     def __init__(self,
@@ -99,6 +116,34 @@ class DataRequest(AbstractMessage):
         for camera in cameras:
             if camera[1] == Compression.ON and camera[2] == Channels.SINGLE:
                 raise ValueError('Invalid camera configuration')
+
+
+class CameraInformationRequest(AbstractMessage):
+    __tag__ = 'gCaI'
+
+    def __init__(self, camera=Camera.ALL):
+        super(CameraInformationRequest, self).__init__(('i', camera.value))
+
+
+class SetCameraParametersRequest(AbstractMessage):
+    __tag__ = 'sCaR'
+
+    def __init__(self, height_in_pixels=320, width_in_pixels=480, field_of_view=60, camera=Camera.ALL):
+        super(SetCameraParametersRequest, self).__init__(('i', height_in_pixels), ('i', width_in_pixels), ('f', field_of_view), ('i', camera.value))
+
+
+class SetCameraPositionRequest(AbstractMessage):
+    __tag__ = 'sCaP'
+
+    def __init__(self, x=0, y=0, z=0, camera=Camera.ALL):
+        super(SetCameraPositionRequest, self).__init__(('f', x), ('f', y), ('f', z), ('i', camera.value))
+
+
+class SetCameraOrientationRequest(AbstractMessage):
+    __tag__ = 'sCaQ'
+
+    def __init__(self, x=0, y=0, z=0, w=1, camera=Camera.ALL):
+        super(SetCameraOrientationRequest, self).__init__(('f', x), ('f', y), ('f', z), ('f', w), ('i', camera.value))
 
 
 class DataResponse(object):
@@ -141,42 +186,3 @@ class DataResponse(object):
         if metadata is not None:
             # self.data = bytes(metadata).decode('utf-8')  # python 3
             self.data = metadata.tobytes().decode('utf-8')  # python 2/3
-
-
-class MetadataRequest(AbstractMessage):
-    __tag__ = 'rMET'
-
-
-class CameraInformationRequest(AbstractMessage):
-    __tag__ = 'gCaI'
-
-    def __init__(self, camera=Camera.ALL):
-        super(CameraInformationRequest, self).__init__(('i', camera.value))
-
-
-class SetCameraParametersRequest(AbstractMessage):
-    __tag__ = 'sCaR'
-
-    def __init__(self, height_in_pixels=320, width_in_pixels=480, field_of_view=60, camera=Camera.ALL):
-        super(SetCameraParametersRequest, self).__init__(('i', height_in_pixels), ('i', width_in_pixels), ('f', field_of_view), ('i', camera.value))
-
-
-class SetCameraPositionRequest(AbstractMessage):
-    __tag__ = 'sCaP'
-
-    def __init__(self, x=0, y=0, z=0, camera=Camera.ALL):
-        super(SetCameraPositionRequest, self).__init__(('f', x), ('f', y), ('f', z), ('i', camera.value))
-
-
-class SetCameraOrientationRequest(AbstractMessage):
-    __tag__ = 'sCaQ'
-
-    def __init__(self, x=0, y=0, z=0, w=1, camera=Camera.ALL):
-        super(SetCameraOrientationRequest, self).__init__(('f', x), ('f', y), ('f', z), ('f', w), ('i', camera.value))
-
-
-class SceneRequest(AbstractMessage):
-    __tag__ = 'CScN'
-
-    def __init__(self, index=0):
-        super(SceneRequest, self).__init__(('i', index))
