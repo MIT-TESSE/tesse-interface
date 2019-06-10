@@ -78,6 +78,9 @@ class Env(object):
             header = conn.recv(8)
             payload_length_imgs = struct.unpack("I", header[:4])[0]
             payload_length_meta = struct.unpack("I", header[4:])[0]
+            # TODO: remove this hack when metadata payload length is fixed
+            if payload_length_meta == 1:
+                payload_length_meta = 4
             max_payload_length = payload_length_imgs + payload_length_meta
         else:
             header = conn.recv(4)
