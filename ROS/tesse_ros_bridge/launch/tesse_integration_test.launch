@@ -1,0 +1,23 @@
+<launch>
+  <arg name="use_sim" default="true"/>
+  <arg name="scene_id" default="0"/>
+
+  <node name="tesse_ros_bridge_2" pkg="tesse_ros_bridge" type="tesse_ros_bridge_2.py" output="screen">
+    <remap from="image_out" to="semantic_img"/>
+    <param name="client_ip" value="172.17.0.1"/>
+    <param name="self_ip" value="172.17.0.1"/>
+    <param name="request_port" value="9000"/>
+    <param name="receive_port" value="9001"/>
+
+    <param name="camera_width" value="480"/>
+    <param name="camera_height" value="320"/>
+    <param name="camera_fov" value="60"/>
+
+    <param name="scene_id" value="$(arg scene_id)"/>
+  </node>
+
+  <rosparam if='$(arg use_sim)'>
+    use_sim_time: true
+  </rosparam>
+
+</launch>
