@@ -7,7 +7,7 @@
 # or recommendations expressed in this material are those of the author(s) and do not necessarily
 # reflect the views of the Under Secretary of Defense for Research and Engineering.
 #
-# © 2019 Massachusetts Institute of Technology.
+#  2019 Massachusetts Institute of Technology.
 #
 # The software/firmware is provided to you on an As-Is basis
 #
@@ -23,7 +23,7 @@ import struct
 from tesse.msgs import *
 
 class Env(object):
-    def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9000):
+    def __init__(self, simulation_ip, own_ip, request_port=9000, receive_port=9001):
         self.simulation_ip = simulation_ip
         self.own_ip = own_ip
         self.request_port = request_port
@@ -37,6 +37,7 @@ class Env(object):
     def request(self, msg, timeout=15):
         # Setup receive socket
         recv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        recv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         recv.settimeout(timeout)
         recv.setblocking(1)
         recv.bind((self.own_ip, self.receive_port))
@@ -54,7 +55,12 @@ class Env(object):
             img_header_size = 32
             data.extend(conn.recv(8))
             payload_length_imgs = struct.unpack("I",data[4:8])[0]
-            data.extend(conn.recv(payload_length_imgs + img_header_size*len(msg.cameras)))
+
+            img_payload = bytearray()
+            while len(img_payload) < payload_length_imgs:
+                img_payload.extend(conn.recv(payload_length_imgs - len(img_payload)))
+            data.extend(img_payload)
+
             payload_length_meta = struct.unpack("I",data[8:12])[0]
             data.extend(conn.recv(payload_length_meta))
 
@@ -73,6 +79,3 @@ class Env(object):
             return DataResponse().decode(data)
         else:
             return data.decode("utf-8")
-
-
-

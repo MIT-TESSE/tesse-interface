@@ -1,0 +1,74 @@
+<launch>
+  <arg name="use_sim" default="false"/>
+  <rosparam if='$(arg use_sim)'>
+    use_sim_time: true
+  </rosparam>
+
+  <node name="tesse_ros_bridge" pkg="tesse_ros_bridge" type="tesse_ros_bridge.py" output="screen">
+    <!-- Topics -->
+    <remap from="left_cam"     to="left_cam"/>
+    <remap from="right_cam"    to="right_cam"/>
+    <remap from="segmentation" to="segmentation"/>
+    <remap from="depth"        to="depth"/>
+    <!-- Network Unity params -->
+    <param name="client_ip"    value="127.0.0.1"/>
+    <param name="self_ip"      value="127.0.0.1"/>
+    <param name="request_port" value="9000"/>
+    <param name="receive_port" value="9001"/>
+    <!-- For simulation time -->
+    <param name="speedup_factor" value="1"/>
+  </node>
+
+<!-- record_player_manager -no-bond -->
+  <!-- Convert it into a point cloud -->
+  <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" output="screen"/>
+
+  <!-- Rectified raw image (internal use) -->
+  <!--
+  <node pkg="nodelet" type="nodelet" name="rectify_depth"
+        args="load image_proc/rectify nodelet_manager -\-no-bond">
+    <remap from="camera_info" to="/left_cam/camera_info"/>
+    <remap from="image_mono"  to="depth" />
+    <remap from="image_rect"  to="depth_rectified" />
+    <!-\- Use nearest neighbor (0) interpolation so we don't streak across
+         depth boundaries -\->
+    <param name="interpolation" value="0" />
+  </node>
+  -->
+
+  <!--
+  <node pkg="nodelet" type="nodelet" name="cloudify" args="load depth_image_proc/point_cloud_xyzrgb nodelet_manager -no-bond">
+    <remap from="rgb/camera_info"             to="left_cam/camera_info"/>
+    <remap from="rgb/image_rect_color"        to="segmentation"/>
+    <remap from="depth_registered/image_rect" to="depth"/>
+
+    <remap from="depth_registered/points"     to="points"/>
+  </node>
+  -->
+
+  <node pkg="nodelet" type="nodelet" name="xyz" args="load depth_image_proc/point_cloud_xyz nodelet_manager --no-bond">
+    <remap from="camera_info"             to="/left_cam/camera_info"/>
+    <remap from="image_rect"              to="depth_rectified"/>
+  </node>
+
+   <!-- Run stereo_dense_reconstruction_node-->
+  <node ns="stereo_gray" name="stereo_image_proc" pkg="stereo_image_proc" type="stereo_image_proc" clear_params="true" output="screen">
+    <remap from="left/image_rect_color" to="/dev/null/left_cam"/>
+    <remap from="right/image_rect_color" to="/dev/null/right_cam"/>
+
+    <remap from="left/image_raw" to="/left_cam" />
+    <remap from="left/camera_info" to="/left_cam/camera_info" />
+    <remap from="right/image_raw" to="/right_cam" />
+    <remap from="right/camera_info" to="/right_cam/camera_info" />
+
+    <param name="approximate_sync" value="true" />
+
+    <!--
+    <rosparam file="$(find tesse_ros_bridge)/cfg/kitti_stereo_jager.yaml"/>
+-->
+  </node>
+
+  <node pkg="tf" type="static_transform_publisher" name="left_cam_tf" args="0 0 -0.05 0 0 0 1 base_link left_cam 100" />
+  <node pkg="tf" type="static_transform_publisher" name="right_cam_tf" args="0 0 0.05 0 0 0 1 base_link right_cam 100" />
+  <node pkg="tf" type="static_transform_publisher" name="rviz" args="0 0 0.0 1 0 0 0 base_link rviz 100" />
+</launch>

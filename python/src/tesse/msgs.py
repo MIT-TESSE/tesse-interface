@@ -7,7 +7,7 @@
 # or recommendations expressed in this material are those of the author(s) and do not necessarily
 # reflect the views of the Under Secretary of Defense for Research and Engineering.
 #
-# © 2019 Massachusetts Institute of Technology.
+#  2019 Massachusetts Institute of Technology.
 #
 # The software/firmware is provided to you on an As-Is basis
 #
@@ -133,7 +133,7 @@ class DataResponse(object):
             (cam_id, data) = (struct.unpack("I",data[:4])[0], data[4:])
             (img_type, data) = (data[:4].decode("utf-8"), data[4:])
             data = data[8:]  # Why?
-            
+
             # Pull out image
             if( img_type == 'xRGB' ):
                 img = np.flip(np.ndarray((img_height,img_width,3),buffer=data[:img_payload_length],dtype='uint8'),0)
@@ -150,7 +150,6 @@ class DataResponse(object):
             images.append(img)
             cameras.append(cam_id)
             types.append(img_type)
-
 
         return (images, cameras, types)
 
