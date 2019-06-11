@@ -198,36 +198,36 @@ class DataResponse(object):
         self.cameras = []
         self.types = []
 
-        self._decode_images(images)
-        self._decode_metadata(metadata)
+        if images is not None:
+            self._decode_images(images)
+        if metadata is not None:
+            self._decode_metadata(metadata)
 
     def _decode_images(self, images=None):
-        if images is not None:
-            while len(images) > 0:
-                img_payload_length = struct.unpack("I", images[4:8])[0]  # the first 4 is an unused header
-                img_width = struct.unpack("I", images[8:12])[0]
-                img_height = struct.unpack("I", images[12:16])[0]
-                cam_id = struct.unpack("I", images[16:20])[0]
-                # img_type = bytes(images[20:24]).decode("utf-8")  # python 3
-                img_type = images[20:24].tobytes().decode("utf-8")  # python 2/3
-                images = images[32:]  # everything except the header
+        while len(images) > 0:
+            img_payload_length = struct.unpack("I", images[4:8])[0]  # the first 4 is an unused header
+            img_width = struct.unpack("I", images[8:12])[0]
+            img_height = struct.unpack("I", images[12:16])[0]
+            cam_id = struct.unpack("I", images[16:20])[0]
+            # img_type = bytes(images[20:24]).decode("utf-8")  # python 3
+            img_type = images[20:24].tobytes().decode("utf-8")  # python 2/3
+            images = images[32:]  # everything except the header
 
-                # img = np.frombuffer(images[:img_payload_length], dtype=np.uint8)  # python 3
-                img = np.frombuffer(images[:img_payload_length].tobytes(), dtype=np.uint8)  # python 2/3
-                if img_type == 'cRGB':
-                    import cv2
-                    img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)[:, :, ::-1]
-                else:
-                    img = img.reshape(img_height, img_width, -1).squeeze()
-                    img = np.flip(img, 0)  # flip vertically
+            # img = np.frombuffer(images[:img_payload_length], dtype=np.uint8)  # python 3
+            img = np.frombuffer(images[:img_payload_length].tobytes(), dtype=np.uint8)  # python 2/3
+            if img_type == 'cRGB':
+                import cv2
+                img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)[:, :, ::-1]
+            else:
+                img = img.reshape(img_height, img_width, -1).squeeze()
+                img = np.flip(img, 0)  # flip vertically
 
-                images = images[img_payload_length:]
+            images = images[img_payload_length:]
 
-                self.images.append(img)
-                self.cameras.append(cam_id)
-                self.types.append(img_type)
+            self.images.append(img)
+            self.cameras.append(cam_id)
+            self.types.append(img_type)
 
     def _decode_metadata(self, metadata=None):
-        if metadata is not None:
-            # self.data = bytes(metadata).decode('utf-8')  # python 3
-            self.data = metadata.tobytes().decode('utf-8')  # python 2/3
+        # self.data = bytes(metadata).decode('utf-8')  # python 3
+        self.data = metadata.tobytes().decode('utf-8')  # python 2/3
