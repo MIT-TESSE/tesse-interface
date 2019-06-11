@@ -111,9 +111,9 @@ class Respawn(PositionMessage):
 
 class SceneRequest(PositionMessage):
     __tag__ = 'CScN'
+
     def __init__(self, index=0):
         super(SceneRequest, self).__init__(('i', index))
-
 
 
 # METADATA INTERFACE
