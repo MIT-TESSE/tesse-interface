@@ -41,7 +41,7 @@ git clone git@github.mit.edu:TESS/TESSE_interface.git
 
 # Install dependencies from rosinstall file using wstool
 wstool init
-wstool merge tess_ros_bridge/install/tess_ros_bridge.rosinstall
+wstool merge TESSE_interface/ROS/tesse_ros_bridge/install/tesse_ros_bridge.rosinstall
 wstool update
 
 # Source TESSE non-ROS code
@@ -60,7 +60,7 @@ source ~/.bashrc
 
 See (python_demonstration.ipynb)[python_demonstration.ipynb] for example usage of the python package.
 
-You can also find Ben's test script at 
+You can also find Ben's test script at
 
 
 
