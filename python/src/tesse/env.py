@@ -79,9 +79,6 @@ class Env(object):
             header = conn.recv(8)
             payload_length_imgs = struct.unpack("I", header[:4])[0]
             payload_length_meta = struct.unpack("I", header[4:])[0]
-            # TODO: remove this hack when metadata payload length is fixed
-            if payload_length_meta == 1:
-                payload_length_meta = 4
             max_payload_length = payload_length_imgs + payload_length_meta
         else:
             header = conn.recv(4)
@@ -109,6 +106,10 @@ class Env(object):
         if tag == 'mult':
             imgs_payload = payload_view[:-payload_length_meta]
             meta_payload = payload_view[-payload_length_meta:]
+            # ignore the default metadata payload that is currently returned when
+            # DataRequest(metadata=False)
+            if len(meta_payload) == 4 and struct.unpack('I', meta_payload)[0] == 0:
+                meta_payload = None
             return DataResponse(images=imgs_payload, metadata=meta_payload)
         else:
             return DataResponse(metadata=payload_view)
