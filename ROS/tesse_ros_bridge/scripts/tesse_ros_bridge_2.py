@@ -54,16 +54,20 @@ class TesseROSWrapper:
                  (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
                  (Camera.DEPTH, Compression.OFF, Channels.THREE)]
 
-        self.left_image_pub = rospy.Publisher("/tesse/left_cam", Image, queue_size=1)
-        self.right_image_pub = rospy.Publisher("/tesse/right_cam", Image, queue_size=1)
-        self.segmented_image_pub = rospy.Publisher("/tesse/segmentation", Image, queue_size=1)
-        self.depth_image_pub = rospy.Publisher("/tesse/depth", Image, queue_size=1)
-        self.image_publishers = [self.left_image_pub, self.right_image_pub, self.segmented_image_pub, self.depth_image_pub]
+        self.left_image_pub = rospy.Publisher("/left_cam", Image, queue_size=1)
+        self.right_image_pub = rospy.Publisher("/right_cam", Image, queue_size=1)
+        self.segmented_image_pub = rospy.Publisher("/segmentation", Image, queue_size=1)
+        self.cam_info_left_pub = rospy.Publisher("left_cam/camera_info", CameraInfo, queue_size=10)
+        self.cam_info_right_pub = rospy.Publisher("right_cam/camera_info", CameraInfo, queue_size=10)
+        self.depth_image_pub = rospy.Publisher("/depth", Image, queue_size=1)
+        self.image_publishers = [self.left_image_pub, self.right_image_pub,
+                                 self.segmented_image_pub, self.depth_image_pub]
 
-        self.imu_pub = rospy.Publisher("/tesse/imu", Imu, queue_size=1)
-        self.odom_pub = rospy.Publisher("/tesse/odom", Odometry, queue_size=1)
+        self.imu_pub = rospy.Publisher("/imu", Imu, queue_size=1)
+        self.odom_pub = rospy.Publisher("/odom", Odometry, queue_size=1)
 
         self.br = tf.TransformBroadcaster()
+        self.transformer = tf.TransformerROS()
 
         # Set camera parameters once for the entire simulation:
         for camera in self.cameras:
@@ -77,18 +81,24 @@ class TesseROSWrapper:
         if self.scene_id != 0:
             result = self.env.request(SceneRequest(self.scene_id))
 
-        # One-shot camera_info publishing for VIO
-        self.publish_camera_info(rospy.Time.now())
+        # Camera_info publishing for VIO
+        self.cam_info_msg_left = CameraInfo()
+        self.cam_info_msg_right = CameraInfo()
+        self.generate_camera_info(rospy.Time.now())
 
-        self.imu_counter = 0
+        self.imu_counter = 0 # only needed for everything_cb
 
-        # self.everything_timer = rospy.Timer(rospy.Duration(1.0/1000.0), self.everything_cb)
-        # self.imu_timer = rospy.Timer(rospy.Duration(1.0/self.imu_rate), self.imu_cb)
-        # self.image_timer = rospy.Timer(rospy.Duration(1.0/self.image_rate), self.image_cb)
+        # self.everything_timer = rospy.Timer(rospy.Duration(1.0/1000.0),
+        #                                         self.everything_cb)
+        # self.imu_timer = rospy.Timer(rospy.Duration(1.0/self.imu_rate),
+        #                                         self.imu_cb)
+        # self.image_timer = rospy.Timer(rospy.Duration(1.0/self.image_rate),
+        #                                         self.image_cb)
 
         if self.use_sim:
             self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
-            # self.clock_timer = rospy.Timer(rospy.Duration(1.0/1000.0), self.clock_cb)
+            # self.clock_timer = rospy.Timer(rospy.Duration(1.0/1000.0),
+                                                # self.clock_cb)
 
         while not rospy.is_shutdown():
             self.everything_cb(None)
@@ -119,6 +129,11 @@ class TesseROSWrapper:
         odom = self.metadata_to_odom(timestamp, metadata)
         self.odom_pub.publish(odom)
 
+        self.cam_info_msg_left.header.stamp = rospy.Time.now()
+        self.cam_info_msg_right.header.stamp = rospy.Time.now()
+        self.cam_info_left_pub.publish(self.cam_info_msg_left)
+        self.cam_info_right_pub.publish(self.cam_info_msg_right)
+
         self.br.sendTransform(metadata['position'],
                          metadata['quaternion'],
                          timestamp,
@@ -144,36 +159,41 @@ class TesseROSWrapper:
         sim_time = rospy.Time.from_sec(metadata['time'] / self.speedup_factor)
         self.clock_pub.publish(sim_time)
 
-    def publish_camera_info(self, timestamp):
-        """ Publish CameraInfo messages one time for left_cam and right_cam
+    def generate_camera_info(self, timestamp):
+        """ Generate CameraInfo messages for left_cam and right_cam
             TODO: need to get baseline from camera metadata (relative poses)
         """
-        left_cam_data = self.env.request(CameraInformationRequest(Camera.RGB_LEFT))
+        left_cam_data = self.env.request(
+                                    CameraInformationRequest(Camera.RGB_LEFT))
+        right_cam_data = self.env.request(
+                                    CameraInformationRequest(Camera.RGB_RIGHT))
         parsed_left_cam_data = self.parse_cam_data(left_cam_data.data)
-        right_cam_data = self.env.request(CameraInformationRequest(Camera.RGB_RIGHT))
         parsed_right_cam_data = self.parse_cam_data(right_cam_data.data)
-
-        cam_info_left = rospy.Publisher("tesse/left_cam/camera_info", CameraInfo, queue_size=10)
-        cam_info_right = rospy.Publisher("tesse/right_cam/camera_info", CameraInfo, queue_size=10)
 
         f = (self.camera_height / 2.0) / np.tan((np.pi*(self.camera_fov / 180.0)) / 2.0)
         fx = f
         fy = f
         cx = self.camera_width / 2 # pixels
         cy = self.camera_height / 2 # pixels
-        baseline = np.abs(parsed_left_cam_data['position'][0] - parsed_right_cam_data['position'][0])
-        print "baseline:", baseline
+        baseline = np.abs(parsed_left_cam_data['position'][0] -
+                            parsed_right_cam_data['position'][0])
         Tx = 0
         Tx_right = -f * baseline
         Ty = 0
 
-        cam_info_msg_left = self.make_camera_msg("left_cam", self.camera_width, self.camera_height, fx, fy, cx, cy, Tx, Ty)
-        cam_info_msg_right = self.make_camera_msg("right_cam", self.camera_width, self.camera_height, fx, fy, cx, cy, Tx_right, Ty)
+        cam_info_msg_left = self.make_camera_msg("left_cam",
+                                                   self.camera_width,
+                                                   self.camera_height,
+                                                   fx, fy, cx, cy, Tx, Ty)
+        cam_info_msg_right = self.make_camera_msg("right_cam",
+                                                   self.camera_width,
+                                                   self.camera_height,
+                                                   fx, fy, cx, cy, Tx_right, Ty)
         cam_info_msg_left.header.stamp = timestamp
         cam_info_msg_right.header.stamp = timestamp
 
-        cam_info_left.publish(cam_info_msg_left)
-        cam_info_right.publish(cam_info_msg_right)
+        self.cam_info_msg_left = cam_info_msg_left
+        self.cam_info_msg_right = cam_info_msg_right
 
     def get_metadata(self):
         """ Return camera meta data object """
@@ -182,26 +202,31 @@ class TesseROSWrapper:
 
         return self.parse_metadata(metadata_response.data)
 
-    # utilities (should go in utils.py file in package):
+    # TODO utilities (should go in utils.py file in package):
     ############################################################################
 
     def parse_metadata(self, data):
         """ Parse metadata into a useful dictionary """
-
-        # tree = BeautifulSoup(data, 'xml')
-        # print "tree:", tree
         # TODO: fix ill-formed metadata response so that it can be parsed better
 
         dict = {}
         data_string = str(data)
         split_data = data_string.split()
 
-        position = [float(split_data[5][3:-1]), float(split_data[6][3:-1]), float(split_data[7][3:-3])]
-        quaternion = [float(split_data[9][3:-1]), float(split_data[10][3:-1]), float(split_data[11][3:-1]), float(split_data[12][3:-3])]
-        velocity = [float(split_data[14][7:-1]), float(split_data[15][7:-1]), float(split_data[16][7:-3])]
-        ang_vel = [float(split_data[19][11:-1]), float(split_data[20][11:-1]), float(split_data[22][2:-3])]
-        acceleration = [float(split_data[24][8:-1]), float(split_data[25][8:-1]), float(split_data[26][8:-3])]
-        ang_acceleration = [float(split_data[29][12:-1]), float(split_data[30][12:-1]), float(split_data[31][12:-3])]
+        position = [float(split_data[5][3:-1]), float(split_data[6][3:-1]),
+                        float(split_data[7][3:-3])]
+        quaternion = [float(split_data[9][3:-1]), float(split_data[10][3:-1]),
+                        float(split_data[11][3:-1]),
+                        float(split_data[12][3:-3])]
+        velocity = [float(split_data[14][7:-1]), float(split_data[15][7:-1]),
+                        float(split_data[16][7:-3])]
+        ang_vel = [float(split_data[19][11:-1]), float(split_data[20][11:-1]),
+                        float(split_data[22][2:-3])]
+        acceleration = [float(split_data[24][8:-1]), float(split_data[25][8:-1]),
+                        float(split_data[26][8:-3])]
+        ang_acceleration = [float(split_data[29][12:-1]),
+                            float(split_data[30][12:-1]),
+                            float(split_data[31][12:-3])]
         time = float(split_data[32][6:-7])
         collision_status = True if split_data[34][8:-1] == 'true' else False
 
