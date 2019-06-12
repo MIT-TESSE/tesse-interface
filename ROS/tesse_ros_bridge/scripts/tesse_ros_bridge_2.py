@@ -127,6 +127,8 @@ class TesseROSWrapper:
             and agent transform
         """
         metadata = self.get_metadata()
+        # TODO (Marcus): this must make sense with what the simulator outputs
+        # We must keep the same time spacing between these msgs and the simulator's data.
         timestamp = rospy.Time.now()
         imu = self.metadata_to_imu(timestamp, metadata)
         self.imu_pub.publish(imu)
@@ -144,7 +146,8 @@ class TesseROSWrapper:
         data_request = DataRequest(False, self.cameras)
         data_response = self.env.request(data_request)
 
-        # TODO should be given by the simulator.
+        # TODO (Marcus): this must make sense with what the simulator outputs
+        # We must keep the same time spacing between these msgs and the simulator's data.
         cameras_timestamp = rospy.Time.now()
 
         for i in range(len(self.cameras)):
