@@ -47,10 +47,15 @@ class TesseROSWrapper:
         self.imu_rate = 100
         self.image_rate = 20
 
-        self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.SINGLE),
+        # TODO use a dictionary for Camera, instead of enum, in msgs.py
+        # to avoid this potential issue
+        # TODO we also need to know frame_id, hardcoding for now, again
+        # use a more descriptive data structure.
+        self.cam_frame_id = ["left_cam", "right_cam", "left_cam", "left_cam"]
+        self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
                  (Camera.RGB_RIGHT, Compression.OFF, Channels.SINGLE),
                  (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
-                 (Camera.DEPTH, Compression.OFF, Channels.THREE)]
+                 (Camera.DEPTH, Compression.OFF, Channels.SINGLE)]
 
         self.left_image_pub = rospy.Publisher("/tesse/left_cam", Image, queue_size=1)
         self.right_image_pub = rospy.Publisher("/tesse/right_cam", Image, queue_size=1)
@@ -74,9 +79,6 @@ class TesseROSWrapper:
         # Send scene request only if we don't want the default scene:
         if self.scene_id != 0:
             result = self.env.request(SceneRequest(self.scene_id))
-
-        # One-shot camera_info publishing for VIO
-        self.publish_camera_info(rospy.Time.now())
 
         self.imu_counter = 0
 
@@ -127,13 +129,22 @@ class TesseROSWrapper:
         data_request = DataRequest(False, self.cameras)
         data_response = self.env.request(data_request)
 
+        # TODO should be given by the simulator.
+        cameras_timestamp = rospy.Time.now()
+
         for i in range(len(self.cameras)):
             if self.cameras[i][2] == Channels.SINGLE:
-                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'mono8')
+                img_depth = np.uint16(data_response.images[i]) * 1000
+                img_msg = self.bridge.cv2_to_imgmsg(img_depth, '16UC1')
+                #img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'mono8')
             elif self.cameras[i][2] == Channels.THREE:
-                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'bgr8')
-            img_msg.header.stamp = rospy.Time.now()
+                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'rgb8')
+
+            img_msg.header.frame_id = self.cam_frame_id[i]
+            img_msg.header.stamp = cameras_timestamp
             self.image_publishers[i].publish(img_msg)
+
+        self.publish_camera_info(cameras_timestamp)
 
     def clock_cb(self, event):
         """ Publish simulated clock time """
@@ -143,7 +154,7 @@ class TesseROSWrapper:
         self.clock_pub.publish(sim_time)
 
     def publish_camera_info(self, timestamp):
-        """ Publish CameraInfo messages one time for left_cam and right_cam
+        """ Publish CameraInfo messages for left_cam and right_cam
             TODO: need to get baseline from camera metadata (relative poses)
         """
         left_cam_data = self.env.request(CameraInformationRequest(Camera.RGB_LEFT))
@@ -160,7 +171,6 @@ class TesseROSWrapper:
         cx = self.camera_width / 2 # pixels
         cy = self.camera_height / 2 # pixels
         baseline = np.abs(parsed_left_cam_data['position'][0] - parsed_right_cam_data['position'][0])
-        print "baseline:", baseline
         Tx = 0
         Tx_right = -f * baseline
         Ty = 0

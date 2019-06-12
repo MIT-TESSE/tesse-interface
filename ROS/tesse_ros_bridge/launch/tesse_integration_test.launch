@@ -55,22 +55,28 @@
 
     <remap from="depth_registered/points"     to="points"/>
   </node>
-  -->
 
-  <node pkg="nodelet" type="nodelet" name="xyz" args="load depth_image_proc/point_cloud_xyz nodelet_manager --no-bond">
-    <remap from="camera_info"             to="/left_cam/camera_info"/>
-    <remap from="image_rect"              to="depth_rectified"/>
+  <node pkg="nodelet" type="nodelet" name="xyz" args="load depth_image_proc/point_cloud_xyz nodelet_manager -no-bond">
+    <remap from="camera_info"              to="/tesse/left_cam/camera_info"/>
+    <remap from="/tesse/camera_info"       to="/tesse/left_cam/camera_info"/>
+    <remap from="image_rect/camera_info"   to="/tesse/depth/camera_info"/>
+
+    <remap from="image_rect"               to="/tesse/depth"/>
+    <remap from="points"           to="gt_point_cloud_xyz"/>
+
+    <param name="queue_size" value="10"/>
   </node>
+  -->
 
    <!-- Run stereo_dense_reconstruction_node-->
   <node ns="stereo_gray" name="stereo_image_proc" pkg="stereo_image_proc" type="stereo_image_proc" clear_params="true" output="screen">
     <remap from="left/image_rect_color" to="/dev/null/left_cam"/>
     <remap from="right/image_rect_color" to="/dev/null/right_cam"/>
 
-    <remap from="left/image_raw" to="/left_cam" />
-    <remap from="left/camera_info" to="/left_cam/camera_info" />
-    <remap from="right/image_raw" to="/right_cam" />
-    <remap from="right/camera_info" to="/right_cam/camera_info" />
+    <remap from="left/image_raw" to="/tesse/left_cam" />
+    <remap from="left/camera_info" to="/tesse/left_cam/camera_info" />
+    <remap from="right/image_raw" to="/tesse/right_cam" />
+    <remap from="right/camera_info" to="/tesse/right_cam/camera_info" />
 
     <param name="approximate_sync" value="true" />
 

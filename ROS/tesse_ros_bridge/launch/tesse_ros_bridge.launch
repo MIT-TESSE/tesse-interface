@@ -6,7 +6,8 @@
 
   <node name="tesse_ros_bridge" pkg="tesse_ros_bridge" type="tesse_ros_bridge.py" output="screen">
     <!-- Topics -->
-    <remap from="left_cam"     to="left_cam"/>
+    <remap from="left_cam"     to="/left_cam"/>
+    <remap from="left_cam/camera_info"     to="/camera_info"/>
     <remap from="right_cam"    to="right_cam"/>
     <remap from="segmentation" to="segmentation"/>
     <remap from="depth"        to="depth"/>

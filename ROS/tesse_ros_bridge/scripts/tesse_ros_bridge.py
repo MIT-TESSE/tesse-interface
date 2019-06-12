@@ -134,6 +134,9 @@ class ImagePublisher:
     # cv_images must be in the same order as the publishers!
     # TODO use a dictionary for Camera, instead of enum, in msgs.py
     # to avoid this potential issue
+    # TODO we also need to know frame_id, hardcoding for now, again
+    # use a more descriptive data structure.
+    cam_frame_id = ["left_cam", "right_cam", "left_cam", "left_cam"]
     for i in range(len(cv_images)):
       try:
         # Transform cv2 image to ROS image, using appropriate encoding.
@@ -146,6 +149,7 @@ class ImagePublisher:
           rospy.logerr('Wrong number of channels for camera: %i' % i)
 
         img_msg.header.stamp = timestamp
+        img_msg.header.frame_id = cam_frame_id[i]
 
         # Publish each image using the corresponding publisher.
         if i < self.len_publishers:
