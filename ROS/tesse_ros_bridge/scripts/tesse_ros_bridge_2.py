@@ -55,21 +55,21 @@ class TesseROSWrapper:
         # use a more descriptive data structure.
         self.cam_frame_id = ["left_cam", "right_cam", "left_cam", "left_cam"]
         self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
-                 (Camera.RGB_RIGHT, Compression.OFF, Channels.SINGLE),
+                 (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
                  (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
                  (Camera.DEPTH, Compression.OFF, Channels.SINGLE)]
 
-        self.left_image_pub = rospy.Publisher("/left_cam", Image, queue_size=1)
-        self.right_image_pub = rospy.Publisher("/right_cam", Image, queue_size=1)
-        self.segmented_image_pub = rospy.Publisher("/segmentation", Image, queue_size=1)
+        self.left_image_pub = rospy.Publisher("left_cam", Image, queue_size=1)
+        self.right_image_pub = rospy.Publisher("right_cam", Image, queue_size=1)
+        self.segmented_image_pub = rospy.Publisher("segmentation", Image, queue_size=1)
         self.cam_info_left_pub = rospy.Publisher("left_cam/camera_info", CameraInfo, queue_size=10)
         self.cam_info_right_pub = rospy.Publisher("right_cam/camera_info", CameraInfo, queue_size=10)
-        self.depth_image_pub = rospy.Publisher("/depth", Image, queue_size=1)
+        self.depth_image_pub = rospy.Publisher("depth", Image, queue_size=1)
         self.image_publishers = [self.left_image_pub, self.right_image_pub,
                                  self.segmented_image_pub, self.depth_image_pub]
 
-        self.imu_pub = rospy.Publisher("/imu", Imu, queue_size=1)
-        self.odom_pub = rospy.Publisher("/odom", Odometry, queue_size=1)
+        self.imu_pub = rospy.Publisher("imu", Imu, queue_size=1)
+        self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=1)
 
         self.br = tf.TransformBroadcaster()
         self.transformer = tf.TransformerROS()
@@ -152,9 +152,7 @@ class TesseROSWrapper:
 
         for i in range(len(self.cameras)):
             if self.cameras[i][2] == Channels.SINGLE:
-                img_depth = np.uint16(data_response.images[i]) * 1000
-                img_msg = self.bridge.cv2_to_imgmsg(img_depth, '16UC1')
-                #img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'mono8')
+                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'mono8')
             elif self.cameras[i][2] == Channels.THREE:
                 img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'rgb8')
 
