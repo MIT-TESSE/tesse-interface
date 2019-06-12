@@ -8,7 +8,7 @@ import tf
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, Imu, CameraInfo
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Pose, PoseStamped
+from geometry_msgs.msg import Pose, PoseStamped, Point, PointStamped
 from rosgraph_msgs.msg import Clock
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -41,6 +41,8 @@ class TesseROSWrapper:
 
         self.body_frame = 'base_link'
         self.world_frame = 'world'
+        #TODO: change this to the correct vector once coordinate frame is fixed:
+        self.gravity_vector = [0.0, -9.81, 0.0] # in 'world' frame
 
         self.bridge = CvBridge()
 
@@ -291,18 +293,25 @@ class TesseROSWrapper:
         imu.header.stamp = timestamp
         imu.header.frame_id = self.body_frame
 
-        imu.orientation.x = metadata['quaternion'][0]
-        imu.orientation.y = metadata['quaternion'][1]
-        imu.orientation.z = metadata['quaternion'][2]
-        imu.orientation.w = metadata['quaternion'][3]
-
         imu.angular_velocity.x = metadata['ang_vel'][0]
         imu.angular_velocity.y = metadata['ang_vel'][1]
         imu.angular_velocity.z = metadata['ang_vel'][2]
 
-        imu.linear_acceleration.x = metadata['ang_vel'][0]
-        imu.linear_acceleration.y = metadata['ang_vel'][1]
-        imu.linear_acceleration.z = metadata['ang_vel'][2]
+        quat = np.array([metadata['quaternion'][0],
+                         metadata['quaternion'][1],
+                         metadata['quaternion'][2],
+                         metadata['quaternion'][3]]) # x,y,z,w
+
+        gravity_quat = np.array(self.gravity_vector + [0.0])
+        gravity_quat_bf = tf.transformations.quaternion_multiply(
+            tf.transformations.quaternion_multiply(quat, gravity_quat),
+            tf.transformations.quaternion_conjugate(quat)
+        )
+        gravity_bf = gravity_quat_bf[:3]
+
+        imu.linear_acceleration.x = metadata['acceleration'][0] + gravity_bf[0]
+        imu.linear_acceleration.y = metadata['acceleration'][1] + gravity_bf[1]
+        imu.linear_acceleration.z = metadata['acceleration'][2] + gravity_bf[2]
 
         return imu
 
