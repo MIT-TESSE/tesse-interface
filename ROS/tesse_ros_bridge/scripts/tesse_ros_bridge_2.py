@@ -163,8 +163,6 @@ class TesseROSWrapper:
         self.cam_info_msg_right.header.stamp = cameras_timestamp
         self.cam_info_left_pub.publish(self.cam_info_msg_left)
         self.cam_info_right_pub.publish(self.cam_info_msg_right)
-        # TODO (Marcus) we need cam info for depth and segmentation cameras as well.
-        # can you do it in the same for loop above? Instead of one by one?
 
     def clock_cb(self, event):
         """ Publish simulated clock time """
