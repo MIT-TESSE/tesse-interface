@@ -1,23 +1,24 @@
 #!/usr/bin/env python
 
 import numpy as np
+import copy
+
 import cv2
 
 import rospy
 import tf
+import tf2_ros
 from std_msgs.msg import Header
 from sensor_msgs.msg import Image, Imu, CameraInfo
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Pose, PoseStamped, Point, PointStamped
+from geometry_msgs.msg import Pose, PoseStamped, Point, PointStamped, TransformStamped
 from rosgraph_msgs.msg import Clock
 from cv_bridge import CvBridge, CvBridgeError
 
 import tesse_ros_bridge
 from tesse.msgs import *
 from tesse.env import *
-
 from bs4 import BeautifulSoup
-
 
 class TesseROSWrapper:
 
@@ -30,6 +31,7 @@ class TesseROSWrapper:
         self.camera_width = rospy.get_param('~camera_width', '480')
         self.camera_height = rospy.get_param('~camera_height', '320')
         self.camera_fov = rospy.get_param('~camera_fov', '60')
+        self.stereo_baseline = rospy.get_param('~stereo_baseline', 0.2)
         self.scene_id = rospy.get_param('~scene_id', '0')
         self.use_sim = rospy.get_param('/use_sim_time', False)
         self.speedup_factor = rospy.get_param('~speedup_factor', 20)
@@ -72,6 +74,7 @@ class TesseROSWrapper:
         self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=1)
 
         self.br = tf.TransformBroadcaster()
+        self.static_br = tf2_ros.StaticTransformBroadcaster()
         self.transformer = tf.TransformerROS()
 
         # Set camera parameters once for the entire simulation:
@@ -81,6 +84,31 @@ class TesseROSWrapper:
                                             self.camera_width,
                                             self.camera_fov,
                                             camera[0]))
+        self.cam_left_position = Point(-self.stereo_baseline / 2, 0.0, 0.0)
+        self.cam_right_position = Point(self.stereo_baseline / 2, 0.0, 0.0)
+        self.env.request(SetCameraPositionRequest(self.cam_left_position.x,
+                                                  self.cam_left_position.y,
+                                                  self.cam_left_position.z,
+                                                  Camera.RGB_LEFT))
+        self.env.request(SetCameraPositionRequest(self.cam_right_position.x,
+                                                  self.cam_right_position.y,
+                                                  self.cam_right_position.z,
+                                                  Camera.RGB_RIGHT))
+
+        # Left cam static tf
+        self.static_tf_cam_left = TransformStamped()
+        self.static_tf_cam_left.header.frame_id = self.body_frame
+        self.static_tf_cam_left.transform.translation = self.cam_left_position
+        self.static_tf_cam_left.transform.rotation.x = 0
+        self.static_tf_cam_left.transform.rotation.y = 0
+        self.static_tf_cam_left.transform.rotation.z = 0
+        self.static_tf_cam_left.transform.rotation.w = 1.0
+        self.static_tf_cam_left.child_frame_id = self.cam_frame_id[0]
+
+        # Right cam static tf
+        self.static_tf_cam_right = copy.deepcopy(self.static_tf_cam_left)
+        self.static_tf_cam_right.transform.translation = self.cam_right_position
+        self.static_tf_cam_right.child_frame_id = self.cam_frame_id[1]
 
         # Send scene request only if we don't want the default scene:
         if self.scene_id != 0:
@@ -90,6 +118,7 @@ class TesseROSWrapper:
         self.cam_info_msg_left = CameraInfo()
         self.cam_info_msg_right = CameraInfo()
         self.generate_camera_info()
+
 
         self.imu_counter = 0 # only needed for everything_cb
 
@@ -103,7 +132,7 @@ class TesseROSWrapper:
         if self.use_sim:
             self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
             # self.clock_timer = rospy.Timer(rospy.Duration(1.0/1000.0),
-                                                # self.clock_cb)
+            # self.clock_cb)
 
         while not rospy.is_shutdown():
             self.everything_cb(None)
@@ -127,9 +156,12 @@ class TesseROSWrapper:
             and agent transform
         """
         metadata = self.get_metadata()
+
         # TODO (Marcus): this must make sense with what the simulator outputs
         # We must keep the same time spacing between these msgs and the simulator's data.
-        timestamp = rospy.Time.now()
+        # What happens if sim_time?
+        timestamp = rospy.Time.from_sec(metadata['time']/ self.speedup_factor)
+
         imu = self.metadata_to_imu(timestamp, metadata)
         self.imu_pub.publish(imu)
 
@@ -141,14 +173,21 @@ class TesseROSWrapper:
                          timestamp,
                          self.body_frame, self.world_frame) # Convention TFs
 
+        self.static_tf_cam_left.header.stamp = timestamp
+        self.static_tf_cam_right.header.stamp = timestamp
+        self.static_br.sendTransform(self.static_tf_cam_left)
+        self.static_br.sendTransform(self.static_tf_cam_right)
+
     def image_cb(self, event):
         """ Publish images from simulator to ROS """
-        data_request = DataRequest(False, self.cameras)
+        data_request = DataRequest(True, self.cameras)
         data_response = self.env.request(data_request)
 
         # TODO (Marcus): this must make sense with what the simulator outputs
         # We must keep the same time spacing between these msgs and the simulator's data.
-        cameras_timestamp = rospy.Time.now()
+        # What happens if sim_time?
+        cameras_timestamp = rospy.Time.from_sec(self.parse_metadata(data_response.data)['time']/ self.speedup_factor)
+        print(data_response.data)
 
         for i in range(len(self.cameras)):
             if self.cameras[i][2] == Channels.SINGLE:
@@ -189,7 +228,8 @@ class TesseROSWrapper:
         cx = self.camera_width / 2 # pixels
         cy = self.camera_height / 2 # pixels
         baseline = np.abs(parsed_left_cam_data['position'][0] -
-                            parsed_right_cam_data['position'][0])
+                          parsed_right_cam_data['position'][0])
+        assert(baseline == self.stereo_baseline)
         Tx = 0
         Tx_right = -f * baseline
         Ty = 0

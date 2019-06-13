@@ -25,9 +25,10 @@
     <param name="camera_width" value="640"/>
     <param name="camera_height" value="480"/>
     <param name="camera_fov" value="37.84929"/>
+    <param name="stereo_baseline" value="0.1"/>
 
     <!-- For simulated time -->
-    <param name="speedup_factor" value="30"/>
+    <param name="speedup_factor" value="1"/>
   </node>
 
   <!-- record_player_manager -no-bond -->
@@ -85,7 +86,9 @@
 -->
   </node>
 
-  <node pkg="tf" type="static_transform_publisher" name="left_cam_tf" args="0 0 -0.05 0 0 0 1 base_link left_cam 100" />
-  <node pkg="tf" type="static_transform_publisher" name="right_cam_tf" args="0 0 0.05 0 0 0 1 base_link right_cam 100" />
-  <node pkg="tf" type="static_transform_publisher" name="rviz" args="0 0 0.0 1 0 0 0 base_link rviz 100" />
+<!--
+  <node pkg="tf" type="static_transform_publisher" name="left_cam_tf" args="0.05 0 0 0 0 0 1 base_link left_cam 100" />
+  <node pkg="tf" type="static_transform_publisher" name="right_cam_tf" args="-0.05 0 0 0 0 0 1 base_link right_cam 100" />
+-->
+  <node pkg="tf" type="static_transform_publisher" name="rviz" args="0 0 0 1 0 0 0 base_link rviz 100" />
 </launch>
