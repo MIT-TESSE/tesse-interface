@@ -64,9 +64,9 @@ class TesseROSWrapper:
         self.left_image_pub = rospy.Publisher("left_cam", Image, queue_size=1)
         self.right_image_pub = rospy.Publisher("right_cam", Image, queue_size=1)
         self.segmented_image_pub = rospy.Publisher("segmentation", Image, queue_size=1)
+        self.depth_image_pub = rospy.Publisher("depth", Image, queue_size=1)
         self.cam_info_left_pub = rospy.Publisher("left_cam/camera_info", CameraInfo, queue_size=10)
         self.cam_info_right_pub = rospy.Publisher("right_cam/camera_info", CameraInfo, queue_size=10)
-        self.depth_image_pub = rospy.Publisher("depth", Image, queue_size=1)
         self.image_publishers = [self.left_image_pub, self.right_image_pub,
                                  self.segmented_image_pub, self.depth_image_pub]
 
@@ -79,7 +79,7 @@ class TesseROSWrapper:
 
         # Set camera parameters once for the entire simulation:
         for camera in self.cameras:
-            result = self.env.request(SetCameraParametersRequest(
+            self.env.request(SetCameraParametersRequest(
                                             self.camera_height,
                                             self.camera_width,
                                             self.camera_fov,
@@ -132,7 +132,7 @@ class TesseROSWrapper:
         if self.use_sim:
             self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
             # self.clock_timer = rospy.Timer(rospy.Duration(1.0/1000.0),
-            # self.clock_cb)
+            #                                     self.clock_cb)
 
         while not rospy.is_shutdown():
             self.everything_cb(None)
@@ -186,8 +186,7 @@ class TesseROSWrapper:
         # TODO (Marcus): this must make sense with what the simulator outputs
         # We must keep the same time spacing between these msgs and the simulator's data.
         # What happens if sim_time?
-        cameras_timestamp = rospy.Time.from_sec(self.parse_metadata(data_response.data)['time']/ self.speedup_factor)
-        print(data_response.data)
+        cameras_timestamp = rospy.Time.from_sec(self.parse_metadata(data_response.metadata)['time']/ self.speedup_factor)
 
         for i in range(len(self.cameras)):
             if self.cameras[i][2] == Channels.SINGLE:
@@ -219,8 +218,8 @@ class TesseROSWrapper:
                                     CameraInformationRequest(Camera.RGB_LEFT))
         right_cam_data = self.env.request(
                                     CameraInformationRequest(Camera.RGB_RIGHT))
-        parsed_left_cam_data = self.parse_cam_data(left_cam_data.data)
-        parsed_right_cam_data = self.parse_cam_data(right_cam_data.data)
+        parsed_left_cam_data = self.parse_cam_data(left_cam_data.metadata)
+        parsed_right_cam_data = self.parse_cam_data(right_cam_data.metadata)
 
         f = (self.camera_height / 2.0) / np.tan((np.pi*(self.camera_fov / 180.0)) / 2.0)
         fx = f
@@ -251,7 +250,7 @@ class TesseROSWrapper:
         metadata_request = MetadataRequest()
         metadata_response = self.env.request(metadata_request)
 
-        return self.parse_metadata(metadata_response.data)
+        return self.parse_metadata(metadata_response.metadata)
 
     # TODO utilities (should go in utils.py file in package):
     ############################################################################
@@ -333,7 +332,7 @@ class TesseROSWrapper:
 
     def metadata_to_odom(self, timestamp, metadata):
         """ Transforms a metadata message to a ROS odometry message.
-        Requires a transform from body to map. (TODO remove hardcoded frame_id)
+        Requires a transform from body to map.
         """
         header = Header()
         header.stamp = timestamp
@@ -363,7 +362,7 @@ class TesseROSWrapper:
 
     def metadata_to_imu(self, timestamp, metadata):
         """ Transforms a metadata message to a ROS imu message.
-        Requires a transform from body to map. (TODO is this actually body frame?)
+        Requires a transform from body to map.
         """
         imu = Imu()
         imu.header.stamp = timestamp
