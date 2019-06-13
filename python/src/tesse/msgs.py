@@ -193,7 +193,7 @@ class SetCameraOrientationRequest(ImageMessage):
 
 class DataResponse(object):
     def __init__(self, images=None, metadata=None):
-        self.data = None
+        self.metadata = None
         self.images = []
         self.cameras = []
         self.types = []
@@ -229,5 +229,5 @@ class DataResponse(object):
             self.types.append(img_type)
 
     def _decode_metadata(self, metadata=None):
-        # self.data = bytes(metadata).decode('utf-8')  # python 3
-        self.data = metadata.tobytes().decode('utf-8')  # python 2/3
+        # self.metadata = bytes(metadata).decode('utf-8')  # python 3
+        self.metadata = metadata.tobytes().decode('utf-8')  # python 2/3
