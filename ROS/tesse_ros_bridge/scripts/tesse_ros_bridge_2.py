@@ -148,8 +148,11 @@ class TesseROSWrapper:
         self.imu_counter += 1
 
         if self.imu_counter >= publish_factor:
-            self.image_cb(None)
-            self.imu_counter = 0
+            try:
+                self.image_cb(None)
+                self.imu_counter = 0
+            except Exception as error:
+                print "failed image_cb: ", error
 
     def imu_cb(self, event):
         """ Publish IMU updates from simulator to ROS as well as odom info
