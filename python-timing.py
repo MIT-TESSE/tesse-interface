@@ -32,7 +32,7 @@ from tesse.msgs import DataRequest
 
 
 def main():
-    parser = argparse.ArgumentParser('timing')
+    parser = argparse.ArgumentParser('python-timing')
     parser.add_argument('--simulation-ip', type=str, default='localhost',
                         help='The ip address for the simulation')
     parser.add_argument('--own-ip', type=str, default='localhost',
