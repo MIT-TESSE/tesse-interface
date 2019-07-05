@@ -218,9 +218,13 @@ class DataResponse(object):
             if img_type == 'cRGB':
                 import cv2
                 img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)[:, :, ::-1]
-            else:
+            else:  # 'xRGB', 'xGRY', or 'xFLT
                 img = img.reshape(img_height, img_width, -1).squeeze()
                 img = np.flip(img, 0)  # flip vertically
+
+            if img_type == 'xFLT':
+                # decode an RGBA color image into a float32 image
+                img = np.dot(img, np.asarray((1.0, 1.0/255.0, 1.0/(255.0*255.0), 1.0/(255.0*255.0*255.0)))).astype('float32')
 
             images = images[img_payload_length:]
 
