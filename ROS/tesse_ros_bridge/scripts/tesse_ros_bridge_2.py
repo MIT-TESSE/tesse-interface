@@ -137,15 +137,21 @@ class TesseROSWrapper:
         while not rospy.is_shutdown():
             self.everything_cb(None)
 
-    def everything_cb(self, event):
+    def everything_cb(self, event=None):
         """ For running everything in one loop """
         publish_factor = int(self.imu_rate/self.image_rate)
 
         if self.use_sim:
-            self.clock_cb(None)
+            try:
+                self.clock_cb(None)
+            except Exception as error:
+                print "failed clock cb: ", error
 
-        self.imu_cb(None)
-        self.imu_counter += 1
+        try:
+            self.imu_cb(None)
+            self.imu_counter += 1
+        except Exception as error:
+            print "failed imu_cb: ", error
 
         if self.imu_counter >= publish_factor:
             try:
@@ -398,4 +404,7 @@ class TesseROSWrapper:
 if __name__ == '__main__':
     rospy.init_node("TesseROSWrapper_node")
     node = TesseROSWrapper()
-    rospy.spin()
+    # import cProfile
+    # cProfile.run('TesseROSWrapper()', '/home/marcus/TESS/ros_bridge_profile_2.cprof')
+
+    # rospy.spin()

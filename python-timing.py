@@ -28,7 +28,7 @@ import argparse
 import numpy as np
 
 from tesse.env import Env
-from tesse.msgs import DataRequest
+from tesse.msgs import DataRequest, MetadataRequest
 
 
 def main():
@@ -65,7 +65,13 @@ def main():
     times = []
     for i in range(args.num_trials):
         start = time.time()
+        metadata_response_1 = env.request(MetadataRequest())
+        metadata_response_2 = env.request(MetadataRequest())
+        metadata_response_3 = env.request(MetadataRequest())
+        metadata_response_4 = env.request(MetadataRequest())
+        metadata_response_5 = env.request(MetadataRequest())
         response = env.request(DataRequest())
+
         if response is None:
             logging.warning("Environment failed to respond on trial {}".format(i))
             continue
