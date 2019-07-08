@@ -15,10 +15,9 @@ from geometry_msgs.msg import Pose, PoseStamped, Point, PointStamped, TransformS
 from rosgraph_msgs.msg import Clock
 from cv_bridge import CvBridge, CvBridgeError
 
-import tesse_ros_bridge
 from tesse.msgs import *
 from tesse.env import *
-from bs4 import BeautifulSoup
+import xml.etree.ElementTree as ET
 
 class TesseROSWrapper:
 
@@ -59,7 +58,7 @@ class TesseROSWrapper:
         self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
                  (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
                  (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
-                 (Camera.DEPTH, Compression.OFF, Channels.SINGLE)]
+                 (Camera.DEPTH, Compression.OFF, Channels.THREE)]
 
         self.left_image_pub = rospy.Publisher("left_cam", Image, queue_size=1)
         self.right_image_pub = rospy.Publisher("right_cam", Image, queue_size=1)
@@ -198,10 +197,11 @@ class TesseROSWrapper:
         cameras_timestamp = rospy.Time.from_sec(self.parse_metadata(data_response.metadata)['time']/ self.speedup_factor)
 
         for i in range(len(self.cameras)):
+            # TODO: remove these if checks, everything is 3-channel now.
             if self.cameras[i][2] == Channels.SINGLE:
-                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'mono8')
+                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i])
             elif self.cameras[i][2] == Channels.THREE:
-                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'rgb8')
+                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i])
 
             img_msg.header.frame_id = self.cam_frame_id[i]
             img_msg.header.stamp = cameras_timestamp
@@ -266,54 +266,67 @@ class TesseROSWrapper:
 
     def parse_metadata(self, data):
         """ Parse metadata into a useful dictionary """
-        # TODO: fix ill-formed metadata response so that it can be parsed better
+
+        # TODO: find a nicer way to traverse the tree
+        root = ET.fromstring(data)
 
         dict = {}
-        data_string = str(data)
-        split_data = data_string.split()
+        dict['position'] = [float(root.findall('position')[0].get('x')),
+                            float(root.findall('position')[0].get('y')),
+                            float(root.findall('position')[0].get('z'))]
 
-        position = [float(split_data[5][3:-1]), float(split_data[6][3:-1]),
-                        float(split_data[7][3:-3])]
-        quaternion = [float(split_data[9][3:-1]), float(split_data[10][3:-1]),
-                        float(split_data[11][3:-1]),
-                        float(split_data[12][3:-3])]
-        velocity = [float(split_data[14][7:-1]), float(split_data[15][7:-1]),
-                        float(split_data[16][7:-3])]
-        ang_vel = [float(split_data[19][11:-1]), float(split_data[20][11:-1]),
-                        float(split_data[22][2:-3])]
-        acceleration = [float(split_data[24][8:-1]), float(split_data[25][8:-1]),
-                        float(split_data[26][8:-3])]
-        ang_acceleration = [float(split_data[29][12:-1]),
-                            float(split_data[30][12:-1]),
-                            float(split_data[31][12:-3])]
-        time = float(split_data[32][6:-7])
-        collision_status = True if split_data[34][8:-1] == 'true' else False
+        dict['quaternion'] = [float(root.findall('quaternion')[0].get('x')),
+                              float(root.findall('quaternion')[0].get('y')),
+                              float(root.findall('quaternion')[0].get('z')),
+                              float(root.findall('quaternion')[0].get('w'))]
 
-        dict['position'] = position
-        dict['quaternion'] = quaternion
-        dict['velocity'] = velocity
-        dict['ang_vel'] = ang_vel
-        dict['acceleration'] = acceleration
-        dict['ang_acceleration'] = ang_acceleration
-        dict['time'] = time
-        dict['collision_status'] = collision_status
+        dict['velocity'] = [float(root.findall('velocity')[0].get('x_dot')),
+                            float(root.findall('velocity')[0].get('y_dot')),
+                            float(root.findall('velocity')[0].get('z_dot'))]
+
+        dict['ang_vel'] = [float(root.findall('angular_velocity')[0].get('x_ang_dot')),
+                           float(root.findall('angular_velocity')[0].get('y_ang_dot')),
+                           float(root.findall('angular_velocity')[0].get('z_ang_dot'))]
+
+        dict['acceleration'] = [float(root.findall('acceleration')[0].get('x_ddot')),
+                                float(root.findall('acceleration')[0].get('y_ddot')),
+                                float(root.findall('acceleration')[0].get('z_ddot'))]
+
+        dict['ang_acceleration'] = [float(root.findall('angular_acceleration')[0].get('x_ang_ddot')),
+                                    float(root.findall('angular_acceleration')[0].get('y_ang_ddot')),
+                                    float(root.findall('angular_acceleration')[0].get('z_ang_ddot'))]
+
+        dict['time'] = float(root.findall('time')[0].text)
+
+        dict['collision_status'] = bool(root.findall('collision')[0].get('status'))
 
         return dict
 
     def parse_cam_data(self, data):
         """ Parse CameraInformationRequest data into a useful dictionary """
-        tree = BeautifulSoup(data, 'xml')
-
+        # TODO: run down why root.findall('position') and other fields doesn't work
+        root = ET.fromstring(data)
         dict = {}
-        dict['id'] = int(tree.camera_info.id.string)
-        #TODO: solve ill-formed parameter property so you can store it
-        dict['position'] = [float(tree.camera_info.position['x']),
-                            float(tree.camera_info.position['y']),
-                            float(tree.camera_info.position['z'])]
-        dict['quaternion'] = [float(tree.camera_info.rotation['x']),
-                              float(tree.camera_info.rotation['y']),
-                              float(tree.camera_info.rotation['z']),
-                              float(tree.camera_info.rotation['w'])]
+
+        dict['name'] = str(root[0][0].text)
+
+        dict['id'] = int(root[0][1].text)
+
+        dict['parameters'] = {'width':int(root[0][2].attrib['width']),
+                              'height':int(root[0][2].attrib['height']),
+                              'fov':float(root[0][2].attrib['fov'])}
+
+        dict['position'] = [float(root[0][3].attrib['x']),
+                            float(root[0][3].attrib['y']),
+                            float(root[0][3].attrib['z'])]
+
+        dict['quaternion'] = [float(root[0][4].attrib['x']),
+                              float(root[0][4].attrib['y']),
+                              float(root[0][4].attrib['z']),
+                              float(root[0][4].attrib['w'])]
+
+        dict['draw_distance'] = {'far':float(root[0][5].attrib['far']),
+                                 'near':float(root[0][5].attrib['near'])}
 
         return dict
 
