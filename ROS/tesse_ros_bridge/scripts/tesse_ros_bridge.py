@@ -34,6 +34,7 @@ class TesseROSWrapper:
         self.scene_id = rospy.get_param('~scene_id', '0')
         self.use_sim = rospy.get_param('/use_sim_time', False)
         self.speedup_factor = rospy.get_param('~speedup_factor', 1)
+        self.visualize = rospy.get_param("~visualize", False)
 
         self.env = Env(simulation_ip=self.client_ip, own_ip=self.self_ip,
                     position_port=self.position_port,
@@ -122,6 +123,16 @@ class TesseROSWrapper:
 
         # TODO: do we need tf's for depth and segmentation cams? I think no...
 
+        if self.visualize:
+            # the rviz frame is a 90 degree x-axis rotation from world.
+            self.static_tf_rviz = TransformStamped()
+            self.static_tf_rviz.header.frame_id = "world"
+            self.static_tf_rviz.transform.rotation.x = 0.7071068
+            self.static_tf_rviz.transform.rotation.y = 0.0
+            self.static_tf_rviz.transform.rotation.z = 0.0
+            self.static_tf_rviz.transform.rotation.w = 0.7071068
+            self.static_tf_rviz.child_frame_id = "rviz"
+
         # Send scene request only if we don't want the default scene:
         if self.scene_id != 0:
             result = self.env.request(SceneRequest(self.scene_id))
@@ -199,8 +210,12 @@ class TesseROSWrapper:
 
         self.static_tf_cam_left.header.stamp = timestamp
         self.static_tf_cam_right.header.stamp = timestamp
+        self.static_br.sendTransform(self.static_tf_rviz)
         self.static_br.sendTransform(self.static_tf_cam_left)
-        self.static_br.sendTransform(self.static_tf_cam_right)
+
+        if self.visualize:
+            self.static_tf_rviz.header.stamp = timestamp
+            self.static_br.sendTransform(self.static_tf_cam_right)
 
     def image_cb(self, event):
         """ Publish images from simulator to ROS """
