@@ -234,7 +234,7 @@ class TesseROSWrapper:
                 depth_cam_data = self.env.request(CameraInformationRequest(self.cameras[i][0]))
                 parsed_depth_cam_data = self.parse_cam_data(depth_cam_data.metadata)
                 img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i] * parsed_depth_cam_data['draw_distance']['far'], 'passthrough')
-            else
+            else:
                 img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'rgb8')
 
             img_msg.header.frame_id = self.cam_frame_id[i]
