@@ -230,10 +230,11 @@ class TesseROSWrapper:
         # cameras_timestamp = rospy.Time.now()
 
         for i in range(len(self.cameras)):
-            # TODO: remove these if checks, everything is 3-channel now.
-            if self.cameras[i][2] == Channels.SINGLE or i == 3:
-                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'passthrough')
-            elif self.cameras[i][2] == Channels.THREE and i != 3:
+            if self.cameras[i][0] == Camera.DEPTH:
+                depth_cam_data = self.env.request(CameraInformationRequest(self.cameras[i][0]))
+                parsed_depth_cam_data = self.parse_cam_data(depth_cam_data.metadata)
+                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i] * parsed_depth_cam_data['draw_distance']['far'], 'passthrough')
+            else
                 img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'rgb8')
 
             img_msg.header.frame_id = self.cam_frame_id[i]
@@ -262,18 +263,20 @@ class TesseROSWrapper:
         parsed_left_cam_data = self.parse_cam_data(left_cam_data.metadata)
         parsed_right_cam_data = self.parse_cam_data(right_cam_data.metadata)
 
-        # TODO: is this necessary?
-        f = (self.camera_height / 2.0) / np.tan((np.pi*(self.camera_fov / 180.0)) / 2.0)
-        fx = f
-        fy = f
-        cx = self.camera_width / 2 # pixels
-        cy = self.camera_height / 2 # pixels
+        # Required for Unity FOV scaling:
+        fov_vertical = self.camera_fov
+        fov_horizontal = fov_vertical * self.camera_width / self.camera_height
+        fx = (self.camera_width / 2.0) / np.tan(np.deg2rad(fov_horizontal) / 2.0)
+        fy = (self.camera_height / 2.0) / np.tan(np.deg2rad(fov_vertical) / 2.0)
+
+        cx = self.camera_width // 2 # pixels
+        cy = self.camera_height // 2 # pixels
         baseline = np.abs(parsed_left_cam_data['position'][0] -
                           parsed_right_cam_data['position'][0])
         assert(baseline == self.stereo_baseline)
         Tx = 0
-        Tx_right = -f * baseline
         Ty = 0
+        Tx_right = -fx * baseline
 
         cam_info_msg_left = self.make_camera_msg("left_cam",
                                                    self.camera_width,
