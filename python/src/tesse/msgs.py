@@ -225,6 +225,7 @@ class DataResponse(object):
             if img_type == 'xFLT':
                 # decode an RGBA color image into a float32 image
                 img = np.dot(img, np.asarray((1.0, 1.0/255.0, 1.0/(255.0*255.0), 1.0/(255.0*255.0*255.0)))).astype('float32')
+                img /= 255.0
 
             images = images[img_payload_length:]
 
