@@ -20,7 +20,7 @@
 
   <!-- Camera arguments -->
   <arg name="fov" default="37.84929"/>
-  <arg name="width" default="640"/>
+  <arg name="width" default="720"/>
   <arg name="height" default="480"/>
   <arg name="stereo_baseline" default="0.1"/>
 

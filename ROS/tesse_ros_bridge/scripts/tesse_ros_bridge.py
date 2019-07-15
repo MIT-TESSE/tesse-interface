@@ -266,6 +266,7 @@ class TesseROSWrapper:
         # Required for Unity FOV scaling:
         fov_vertical = self.camera_fov
         fov_horizontal = fov_vertical * self.camera_width / self.camera_height
+        fov_horizontal = np.rad2deg(2 * np.arctan(np.tan(np.deg2rad(fov_vertical) / 2) * self.camera_width / self.camera_height))
         fx = (self.camera_width / 2.0) / np.tan(np.deg2rad(fov_horizontal) / 2.0)
         fy = (self.camera_height / 2.0) / np.tan(np.deg2rad(fov_vertical) / 2.0)
 
