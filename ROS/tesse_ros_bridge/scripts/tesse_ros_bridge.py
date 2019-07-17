@@ -210,12 +210,12 @@ class TesseROSWrapper:
 
         self.static_tf_cam_left.header.stamp = timestamp
         self.static_tf_cam_right.header.stamp = timestamp
-        self.static_br.sendTransform(self.static_tf_rviz)
         self.static_br.sendTransform(self.static_tf_cam_left)
+        self.static_br.sendTransform(self.static_tf_cam_right)
 
         if self.visualize:
             self.static_tf_rviz.header.stamp = timestamp
-            self.static_br.sendTransform(self.static_tf_cam_right)
+            self.static_br.sendTransform(self.static_tf_rviz)
 
     def image_cb(self, event):
         """ Publish images from simulator to ROS """
@@ -319,17 +319,17 @@ class TesseROSWrapper:
                             float(root[2].attrib['y_dot']),
                             float(root[2].attrib['z_dot'])]
 
-        dict['ang_vel'] = [float(root[3].attrib['x_ang_dot']),
-                           float(root[3].attrib['y_ang_dot']),
-                           float(root[3].attrib['z_ang_dot'])]
+        dict['ang_vel'] = [np.deg2rad(float(root[3].attrib['x_ang_dot'])),
+                           np.deg2rad(float(root[3].attrib['y_ang_dot'])),
+                           np.deg2rad(float(root[3].attrib['z_ang_dot']))]
 
         dict['acceleration'] = [float(root[4].attrib['x_ddot']),
                                 float(root[4].attrib['y_ddot']),
                                 float(root[4].attrib['z_ddot'])]
 
-        dict['ang_acceleration'] = [float(root[5].attrib['x_ang_ddot']),
-                                    float(root[5].attrib['y_ang_ddot']),
-                                    float(root[5].attrib['z_ang_ddot'])]
+        dict['ang_accel'] = [np.deg2rad(float(root[5].attrib['x_ang_ddot'])),
+                             np.deg2rad(float(root[5].attrib['y_ang_ddot'])),
+                             np.deg2rad(float(root[5].attrib['z_ang_ddot']))]
 
         dict['time'] = float(root[6].text)
 
