@@ -204,9 +204,9 @@ class TesseROSWrapper:
         self.odom_pub.publish(odom)
 
         self.br.sendTransform(metadata['position'],
-                         metadata['quaternion'],
-                         timestamp,
-                         self.body_frame, self.world_frame) # Convention TFs
+                              metadata['quaternion'],
+                              timestamp,
+                              self.body_frame, self.world_frame) # Convention TFs
 
         self.static_tf_cam_left.header.stamp = timestamp
         self.static_tf_cam_right.header.stamp = timestamp
@@ -226,25 +226,34 @@ class TesseROSWrapper:
         # We must keep the same time spacing between these msgs and the simulator's data.
         # What happens if sim_time?
 
-        cameras_timestamp = rospy.Time.from_sec(self.parse_metadata(data_response.metadata)['time'] / self.speedup_factor)
-        # cameras_timestamp = rospy.Time.now()
+        metadata = self.parse_metadata(data_response.metadata)
 
+        timestamp = rospy.Time.from_sec(metadata['time'] / self.speedup_factor)
+        # timestamp = rospy.Time.now()
+
+        # TODO: clean this up once we verify what we want (RGB vs Mono)
         for i in range(len(self.cameras)):
             if self.cameras[i][0] == Camera.DEPTH:
                 depth_cam_data = self.env.request(CameraInformationRequest(self.cameras[i][0]))
                 parsed_depth_cam_data = self.parse_cam_data(depth_cam_data.metadata)
+                # TODO: Is this rescaling still required?
                 img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i] * parsed_depth_cam_data['draw_distance']['far'], 'passthrough')
             else:
                 img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'rgb8')
 
             img_msg.header.frame_id = self.cam_frame_id[i]
-            img_msg.header.stamp = cameras_timestamp
+            img_msg.header.stamp = timestamp
             self.image_publishers[i].publish(img_msg)
 
-        self.cam_info_msg_left.header.stamp = cameras_timestamp
-        self.cam_info_msg_right.header.stamp = cameras_timestamp
+        self.cam_info_msg_left.header.stamp = timestamp
+        self.cam_info_msg_right.header.stamp = timestamp
         self.cam_info_left_pub.publish(self.cam_info_msg_left)
         self.cam_info_right_pub.publish(self.cam_info_msg_right)
+
+        self.br.sendTransform(metadata['position'],
+                              metadata['quaternion'],
+                              timestamp,
+                              self.body_frame, self.world_frame) # Convention TFs
 
     def clock_cb(self, event):
         """ Publish simulated clock time """
