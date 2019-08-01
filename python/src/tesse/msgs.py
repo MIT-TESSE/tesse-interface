@@ -1,4 +1,4 @@
-#**************************************************************************************************
+###################################################################################################
 # Distribution authorized to U.S. Government agencies and their contractors. Other requests for
 # this document shall be referred to the MIT Lincoln Laboratory Technology Office.
 #
@@ -7,7 +7,7 @@
 # or recommendations expressed in this material are those of the author(s) and do not necessarily
 # reflect the views of the Under Secretary of Defense for Research and Engineering.
 #
-#  2019 Massachusetts Institute of Technology.
+# (c) 2019 Massachusetts Institute of Technology.
 #
 # The software/firmware is provided to you on an As-Is basis
 #
@@ -16,51 +16,13 @@
 # are defined by DFARS 252.227-7013 or DFARS 252.227-7014 as detailed above. Use of this work other
 # than as specifically authorized by the U.S. Government may violate any copyrights that exist in
 # this work.
-#**************************************************************************************************
+###################################################################################################
 
-from enum import Enum
 import struct
 import numpy as np
 
-class Transform(object):
-    __tag__ = 'TLPT'
-
-    def __init__(self, translate_x=0, translate_z=0, rotate_y=0):
-        self.translate_x = translate_x
-        self.translate_z = translate_z
-        self.rotate_y = rotate_y
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend( self.__tag__.encode() )
-        payload.extend(struct.pack("f", self.translate_x))
-        payload.extend(struct.pack("f", self.translate_z))
-        payload.extend(struct.pack("f", self.rotate_y))
-        return payload
-
-
-class AddRelativeForceAndTorque(object):
-    __tag__ = 'xBFF'
-
-    def __init__(self, force_z=0, torque_y=0):
-        self.force_z = force_z
-        self.torque_y = torque_y
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        payload.extend(struct.pack("f", self.force_z))
-        payload.extend(struct.pack("f", self.torque_y))
-        return payload
-
-
-class Respawn(object):
-    __tag__ = 'CScN'
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        return payload
+from abc import ABCMeta
+from enum import Enum
 
 
 class Camera(Enum):
@@ -71,179 +33,206 @@ class Camera(Enum):
     DEPTH = 3
     THIRD_PERSON = 4
 
+
 class Compression(Enum):
     OFF = 0
     ON = 1
+
 
 class Channels(Enum):
     THREE = 0
     SINGLE = 1
 
-class DataRequest(object):
-    def __init__(self, metadata=True,
-                       cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
-                                (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
-                                (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
-                                (Camera.DEPTH, Compression.OFF, Channels.THREE),
-                                (Camera.THIRD_PERSON, Compression.OFF, Channels.THREE)
-                                ]):
-        self.metadata = metadata
-        self.cameras = cameras
+
+class Interface(Enum):
+    POSITION = 0
+    METADATA = 1
+    IMAGE = 2
+
+
+class AbstractMessage:
+    __metaclass__ = ABCMeta
+
+    def __init__(self, *message_contents):
+        self.message_contents = message_contents
 
     def encode(self):
         payload = bytearray()
-
-        if self.metadata:
-            payload.extend('tIMG'.encode())
-        else:
-            payload.extend('rIMG'.encode())
-
-        for camera in self.cameras:
-            payload.extend(bytearray(struct.pack('I', camera[0].value))) # Camera
-            payload.extend(bytearray(struct.pack('I', camera[1].value))) # Compression
-            payload.extend(bytearray(struct.pack('I', camera[2].value))) # Channels
-
+        payload.extend(self.__tag__.encode())
+        for attribute in self.message_contents:
+            payload.extend(struct.pack(*attribute))
         return payload
+
+    def get_interface(self):
+        return self.__interface__
+
+
+# POSITION INTERFACE
+
+class PositionMessage(AbstractMessage):
+    __interface__ = Interface.POSITION
+
+    def __init__(self, *message_contents):
+        super(PositionMessage, self).__init__(*message_contents)
+
+
+class Transform(PositionMessage):
+    __tag__ = 'TLPT'
+
+    def __init__(self, translate_x=0, translate_z=0, rotate_y=0):
+        super(Transform, self).__init__(('f', translate_x), ('f', translate_z), ('f', rotate_y))
+
+
+class AddRelativeForceAndTorque(PositionMessage):
+    __tag__ = 'xBFF'
+
+    def __init__(self, force_z=0, torque_y=0):
+        super(AddRelativeForceAndTorque, self).__init__(('f', force_z), ('f', torque_y))
+
+
+class Reposition(PositionMessage):
+    __tag__ = 'sPoS'
+
+    def __init__(self, position_x=0, position_y=0, position_z=0, orientation_x=0, orientation_y=0, orientation_z=0, orientation_w=0):
+        super(Reposition, self).__init__(
+            ('f', position_x),
+            ('f', position_y),
+            ('f', position_z),
+            ('f', orientation_x),
+            ('f', orientation_y),
+            ('f', orientation_z),
+            ('f', orientation_w),
+        )
+
+
+class Respawn(PositionMessage):
+    __tag__ = 'RSPN'
+
+
+class SceneRequest(PositionMessage):
+    __tag__ = 'CScN'
+
+    def __init__(self, index=0):
+        super(SceneRequest, self).__init__(('i', index))
+
+
+# METADATA INTERFACE
+
+class MetadataMessage(AbstractMessage):
+    __interface__ = Interface.METADATA
+
+    def __init__(self, *message_contents):
+        super(MetadataMessage, self).__init__(*message_contents)
+
+
+class MetadataRequest(MetadataMessage):
+    __tag__ = 'rMET'
+
+
+# IMAGE INTERFACE
+
+class ImageMessage(AbstractMessage):
+    __interface__ = Interface.IMAGE
+
+    def __init__(self, *message_contents):
+        super(ImageMessage, self).__init__(*message_contents)
+
+
+class DataRequest(ImageMessage):
+    def __init__(self,
+                 metadata=True,
+                 cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
+                          (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
+                          (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
+                          (Camera.DEPTH, Compression.OFF, Channels.THREE),
+                          (Camera.THIRD_PERSON, Compression.OFF, Channels.THREE)
+                          ]):
+        self._validate_cameras(cameras)
+
+        self.__tag__ = 'tIMG' if metadata else 'rIMG'
+        camera_vals = []
+        for camera in cameras:
+            camera_vals.append(('I', camera[0].value))
+            camera_vals.append(('I', camera[1].value))
+            camera_vals.append(('I', camera[2].value))
+        super(DataRequest, self).__init__(*camera_vals)
+
+    def _validate_cameras(self, cameras):
+        for camera in cameras:
+            if camera[1] == Compression.ON and camera[2] == Channels.SINGLE:
+                raise ValueError('Invalid camera configuration')
+
+
+class CameraInformationRequest(ImageMessage):
+    __tag__ = 'gCaI'
+
+    def __init__(self, camera=Camera.ALL):
+        super(CameraInformationRequest, self).__init__(('i', camera.value))
+
+
+class SetCameraParametersRequest(ImageMessage):
+    __tag__ = 'sCaR'
+
+    def __init__(self, height_in_pixels=320, width_in_pixels=480, field_of_view=60, camera=Camera.ALL):
+        super(SetCameraParametersRequest, self).__init__(('i', height_in_pixels), ('i', width_in_pixels), ('f', field_of_view), ('i', camera.value))
+
+
+class SetCameraPositionRequest(ImageMessage):
+    __tag__ = 'sCaP'
+
+    def __init__(self, x=0, y=0, z=0, camera=Camera.ALL):
+        super(SetCameraPositionRequest, self).__init__(('f', x), ('f', y), ('f', z), ('i', camera.value))
+
+
+class SetCameraOrientationRequest(ImageMessage):
+    __tag__ = 'sCaQ'
+
+    def __init__(self, x=0, y=0, z=0, w=1, camera=Camera.ALL):
+        super(SetCameraOrientationRequest, self).__init__(('f', x), ('f', y), ('f', z), ('f', w), ('i', camera.value))
 
 
 class DataResponse(object):
-    def __init__(self):
-        self.data = []
+    def __init__(self, images=None, metadata=None):
+        self.metadata = None
         self.images = []
         self.cameras = []
         self.types = []
 
-    def decode(self, data):
-        (tag, data) = (data[:4].decode("utf-8"), data[4:])
-        (payload_length_imgs, data) = (struct.unpack("I",data[:4])[0], data[4:])
-        (payload_length_meta, data) = (struct.unpack("I",data[:4])[0], data[4:])
+        if images is not None:
+            self._decode_images(images)
+        if metadata is not None:
+            self._decode_metadata(metadata)
 
-        self.data = data[payload_length_imgs:].decode("utf-8")
-        (self.images, self.cameras, self.type) = self.decode_images(data[:payload_length_imgs])
+    def _decode_images(self, images=None):
+        while len(images) > 0:
+            img_payload_length = struct.unpack("I", images[4:8])[0]  # the first 4 is an unused header
+            img_width = struct.unpack("I", images[8:12])[0]
+            img_height = struct.unpack("I", images[12:16])[0]
+            cam_id = struct.unpack("I", images[16:20])[0]
+            # img_type = bytes(images[20:24]).decode("utf-8")  # python 3
+            img_type = images[20:24].tobytes().decode("utf-8")  # python 2/3
+            images = images[32:]  # everything except the header
 
-        return self
-
-    def decode_images(self, data):
-        (images, cameras, types) = ([], [], [])
-        while len(data) > 0:
-            (message_type, data) = (data[:4].decode("utf-8"), data[4:])
-            (img_payload_length, data) = (struct.unpack("I",data[:4])[0], data[4:])
-            (img_width, data) = (struct.unpack("I",data[:4])[0], data[4:])
-            (img_height, data) = (struct.unpack("I",data[:4])[0], data[4:])
-            (cam_id, data) = (struct.unpack("I",data[:4])[0], data[4:])
-            (img_type, data) = (data[:4].decode("utf-8"), data[4:])
-            data = data[8:]  # Why?
-
-            # Pull out image
-            if( img_type == 'xRGB' ):
-                img = np.flip(np.ndarray((img_height,img_width,3),buffer=data[:img_payload_length],dtype='uint8'),0)
-            elif( img_type == 'xGRY' ):
-                img = np.flip(np.ndarray((img_height,img_width),buffer=data[:img_payload_length],dtype='uint8'),0)
-            elif( img_type == 'cRGB'):
+            # img = np.frombuffer(images[:img_payload_length], dtype=np.uint8)  # python 3
+            img = np.frombuffer(images[:img_payload_length].tobytes(), dtype=np.uint8)  # python 2/3
+            if img_type == 'cRGB':
                 import cv2
-                ndarr = np.frombuffer(data[:img_payload_length], dtype=np.uint8)
-                img = cv2.imdecode(ndarr, cv2.IMREAD_UNCHANGED)
-                img = img[:,:,[2,1,0]]
+                img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)[:, :, ::-1]
+            else:  # 'xRGB', 'xGRY', or 'xFLT
+                img = img.reshape(img_height, img_width, -1).squeeze()
+                img = np.flip(img, 0)  # flip vertically
 
-            data = data[img_payload_length:]
+            if img_type == 'xFLT':
+                # decode an RGBA color image into a float32 image
+                img = np.dot(img, np.asarray((1.0, 1.0/255.0, 1.0/(255.0*255.0), 1.0/(255.0*255.0*255.0)))).astype('float32')
+                img /= 255.0
 
-            images.append(img)
-            cameras.append(cam_id)
-            types.append(img_type)
+            images = images[img_payload_length:]
 
-        return (images, cameras, types)
+            self.images.append(img)
+            self.cameras.append(cam_id)
+            self.types.append(img_type)
 
-
-
-class MetadataRequest(object):
-    __tag__ = 'rMET'
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        return payload
-
-
-class CameraInformationRequest(object):
-    __tag__ = 'gCaI'
-
-    def __init__(self, camera=Camera.ALL):
-        self.camera = camera
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        payload.extend(bytearray(struct.pack('i', -1)))
-        return payload
-
-
-class SetCameraParametersRequest(object):
-    __tag__ = 'sCaR'
-
-    def __init__(self, height_in_pixels=320, width_in_pixels=480, field_of_view=60, camera=Camera.ALL):
-        self.height_in_pixels = height_in_pixels
-        self.width_in_pixels = width_in_pixels
-        self.field_of_view = field_of_view
-        self.camera = camera
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        payload.extend(bytearray(struct.pack('i', self.height_in_pixels)))
-        payload.extend(bytearray(struct.pack('i', self.width_in_pixels)))
-        payload.extend(bytearray(struct.pack('f', self.field_of_view)))
-        payload.extend(bytearray(struct.pack('i', self.camera.value)))
-        return payload
-
-
-class SetCameraPositionRequest(object):
-    __tag__ = 'sCaP'
-
-    def __init__(self, x=0, y=0, z=0, camera=Camera.ALL):
-        self.x = x
-        self.y = y
-        self.z = z
-        self.camera = camera
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        payload.extend(bytearray(struct.pack('f', self.x)))
-        payload.extend(bytearray(struct.pack('f', self.y)))
-        payload.extend(bytearray(struct.pack('f', self.z)))
-        payload.extend(bytearray(struct.pack('i', self.camera.value)))
-        return payload
-
-
-class SetCameraOrientationRequest(object):
-    __tag__ = 'sCaQ'
-
-    def __init__(self, x=0, y=0, z=0, w=1, camera=Camera.ALL):
-        self.x = x
-        self.y = y
-        self.z = z
-        self.w = w
-        self.camera = camera
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        payload.extend(bytearray(struct.pack('f', self.x)))
-        payload.extend(bytearray(struct.pack('f', self.y)))
-        payload.extend(bytearray(struct.pack('f', self.z)))
-        payload.extend(bytearray(struct.pack('f', self.w)))
-        payload.extend(bytearray(struct.pack('i', self.camera)))
-        return payload
-
-
-class SceneRequest(object):
-    __tag__ = 'CScN'
-
-    def __init__(self, index=0):
-        self.index = index
-
-    def encode(self):
-        payload = bytearray()
-        payload.extend(self.__tag__.encode())
-        payload.extend(bytearray(struct.pack('i', 5)))
-        return payload
+    def _decode_metadata(self, metadata=None):
+        # self.metadata = bytes(metadata).decode('utf-8')  # python 3
+        self.metadata = metadata.tobytes().decode('utf-8')  # python 2/3

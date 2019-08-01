@@ -1,4 +1,4 @@
-#**************************************************************************************************
+###################################################################################################
 # Distribution authorized to U.S. Government agencies and their contractors. Other requests for
 # this document shall be referred to the MIT Lincoln Laboratory Technology Office.
 #
@@ -7,7 +7,8 @@
 # or recommendations expressed in this material are those of the author(s) and do not necessarily
 # reflect the views of the Under Secretary of Defense for Research and Engineering.
 #
-# 2019 Massachusetts Institute of Technology.
+# (c) 2019 Massachusetts Institute of Technology.
+
 #
 # The software/firmware is provided to you on an As-Is basis
 #
@@ -16,7 +17,7 @@
 # are defined by DFARS 252.227-7013 or DFARS 252.227-7014 as detailed above. Use of this work other
 # than as specifically authorized by the U.S. Government may violate any copyrights that exist in
 # this work.
-#**************************************************************************************************
+###################################################################################################
 
 from setuptools import setup, find_packages
 
@@ -30,5 +31,5 @@ setup(
     packages=find_packages('src'),
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
-    package_dir={'':'src'},
+    package_dir={'': 'src'},
 )

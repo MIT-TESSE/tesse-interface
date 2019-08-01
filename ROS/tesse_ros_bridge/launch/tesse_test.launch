@@ -1,0 +1,132 @@
+<!--
+     Launch TESSE simulator as well as stereo_gray and semantic point
+     cloud reconstructions optionally.
+     RVIZ is used for visualization.
+-->
+
+<launch>
+  <arg name="ns" default="tesse"/>
+  <arg name="publish_point_clouds" default="true"/>
+  <arg name="visualize" default="true"/>
+
+  <!-- Sim arguments -->
+  <arg name="use_sim" default="false"/>
+  <arg name="speedup_factor" default="1"/>
+  <arg name="scene_id" default="0"/>
+
+  <!-- Network arguments -->
+  <arg name="client_ip" default="127.0.0.1"/>
+  <arg name="self_ip" default="127.0.0.1"/>
+
+  <!-- Camera arguments -->
+  <arg name="fov" default="37.84929"/>
+  <arg name="width" default="720"/>
+  <arg name="height" default="480"/>
+  <arg name="stereo_baseline" default="0.1"/>
+
+  <!-- If use_sim, simulator will publish clock modified by speedup_factor -->
+  <rosparam if='$(arg use_sim)'>
+    use_sim_time: true
+  </rosparam>
+
+  <node ns="$(arg ns)" name="tesse_ros_bridge" pkg="tesse_ros_bridge"
+        type="tesse_ros_bridge.py" output="screen">
+    <!-- Topics -->
+    <remap from="left_cam"     to="left_cam"/>
+    <remap from="right_cam"    to="right_cam"/>
+    <remap from="segmentation" to="segmentation"/>
+    <remap from="depth"        to="depth"/>
+
+    <!-- Network Unity params -->
+    <param name="client_ip" value="$(arg client_ip)"/>
+    <param name="self_ip" value="$(arg self_ip)"/>
+    <param name="position_port" value="9000"/>
+    <param name="metadata_port" value="9001"/>
+    <param name="image_port" value="9002"/>
+
+    <!-- Simulator params -->
+    <param name="scene_id" value="$(arg scene_id)"/>
+    <param name="visualize" value="$(arg visualize)"/>
+
+    <!-- Camera params -->
+    <param name="camera_width" value="$(arg width)"/>
+    <param name="camera_height" value="$(arg height)"/>
+    <param name="camera_fov" value="$(arg fov)"/>
+    <param name="stereo_baseline" value="$(arg stereo_baseline)"/>
+
+    <!-- For simulated time -->
+    <param name="speedup_factor" value="$(arg speedup_factor)"/>
+  </node>
+
+  <group if="$(arg publish_point_clouds)">
+
+    <!-- Convert it into a point cloud -->
+    <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager"
+          output="screen"/>
+
+    <!-- Rectified raw image (internal use) -->
+    <!-- <node pkg="nodelet" type="nodelet" name="rectify_depth"
+          args="load image_proc/rectify nodelet_manager -\-no-bond">
+      <remap from="camera_info" to="/$(arg ns)/left_cam/camera_info"/>
+      <remap from="image_mono"  to="/$(arg ns)/depth" />
+      <remap from="image_rect"  to="depth_rectified" />
+      <param name="interpolation" value="0" />
+    </node> -->
+
+    <!-- For registered semantic point cloud conversion -->
+    <node pkg="nodelet" type="nodelet" name="cloudify"
+          args="load depth_image_proc/point_cloud_xyzrgb nodelet_manager
+          -no-bond">
+      <remap from="rgb/camera_info"             to="/$(arg ns)/left_cam/camera_info"/>
+      <remap from="rgb/image_rect_color"        to="/$(arg ns)/segmentation"/>
+      <remap from="depth_registered/image_rect" to="/$(arg ns)/depth"/>
+
+      <remap from="depth_registered/points"     to="points"/>
+
+      <param name="queue_size" value="20"/>
+    </node>
+
+    <!-- For stereo point cloud conversion -->
+    <node pkg="nodelet" type="nodelet" name="xyz"
+          args="load depth_image_proc/point_cloud_xyz nodelet_manager -no-bond">
+      <remap from="camera_info"              to="/$(arg ns)/left_cam/camera_info"/>
+      <!-- <remap from="/tesse/camera_info"       to="/$(arg ns)/left_cam/camera_info"/> TODO: do we need this? -->
+      <remap from="image_rect/camera_info"   to="/$(arg ns)/depth/camera_info"/>
+
+      <remap from="image_rect"               to="/$(arg ns)/depth"/>
+      <remap from="points"                   to="gt_point_cloud_xyz"/>
+
+      <param name="queue_size" value="10"/>
+    </node>
+
+
+     <!-- Run stereo_dense_reconstruction_node -->
+    <node ns="stereo_gray" name="stereo_image_proc" pkg="stereo_image_proc"
+          type="stereo_image_proc" clear_params="true" output="screen">
+      <remap from="left/image_rect_color" to="/dev/null/left_cam"/>
+      <remap from="right/image_rect_color" to="/dev/null/right_cam"/>
+
+      <remap from="left/image_raw" to="/$(arg ns)/left_cam" />
+      <remap from="left/camera_info" to="/$(arg ns)/left_cam/camera_info" />
+      <remap from="right/image_raw" to="/$(arg ns)/right_cam" />
+      <remap from="right/camera_info" to="/$(arg ns)/right_cam/camera_info" />
+
+      <param name="approximate_sync" value="true" />
+
+      <!--
+      <rosparam file="$(find tesse_ros_bridge)/cfg/kitti_stereo_jager.yaml"/>
+      -->
+    </node>
+
+  </group>
+
+  <group if="$(arg visualize)">
+
+    <node pkg="rviz" type="rviz" name="rviz"
+          args="-d $(find tesse_ros_bridge)/rviz/tesse_semantic_without_voxblox.rviz"/>
+    <!-- Currently this transform is published in the tesse_ros_bridge node -->
+    <!-- <node pkg="tf" type="static_transform_publisher" name="rviz_tf_pub"
+          args="0 0 0 1 0 1.57 world rviz 100" /> -->
+
+  </group>
+</launch>

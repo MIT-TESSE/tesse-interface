@@ -1,266 +1,468 @@
 #!/usr/bin/env python
 
-import math
 import numpy as np
+import copy
+
 import cv2
 
 import rospy
 import tf
+import tf2_ros
 from std_msgs.msg import Header
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image, Imu, CameraInfo
 from nav_msgs.msg import Odometry
-from cv_bridge import CvBridge, CvBridgeError
+from geometry_msgs.msg import Pose, PoseStamped, Point, PointStamped, TransformStamped
 from rosgraph_msgs.msg import Clock
-
-import tesse_ros_bridge
+from cv_bridge import CvBridge, CvBridgeError
 
 from tesse.msgs import *
 from tesse.env import *
+import xml.etree.ElementTree as ET
 
-#### The following should be in a utilities.py file ###########
-def make_camera_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
-  camera_info_msg = CameraInfo()
-  camera_info_msg.header.frame_id = frame_id
-  camera_info_msg.width = width
-  camera_info_msg.height = height
-  camera_info_msg.K = [fx, 0, cx,
-                        0, fy, cy,
-                        0, 0, 1]
-  # No rectification
-  camera_info_msg.R = [1, 0, 0,
-                       0, 1, 0,
-                       0, 0, 1]
-  # No distortion
-  camera_info_msg.distortion_model = "plumb_bob"
-  camera_info_msg.D = [0, 0, 0, 0]
+class TesseROSWrapper:
 
-  # Ty = 0 and Tx = -fx' * B, where B is the baseline between the cameras.
-  camera_info_msg.P = [fx, 0, cx, Tx,
-                        0, fy, cy, Ty,
-                        0, 0, 1, 0]
-  return camera_info_msg
+    def __init__(self):
+        self.client_ip = rospy.get_param('~client_ip', '127.0.0.1')
+        self.self_ip = rospy.get_param('~self_ip', '127.0.0.1')
+        self.position_port = rospy.get_param('~position_port', '9000')
+        self.metadata_port = rospy.get_param('~metadata_port', '9001')
+        self.image_port = rospy.get_param('~image_port', '9002')
+        self.camera_width = rospy.get_param('~camera_width', '480')
+        self.camera_height = rospy.get_param('~camera_height', '320')
+        self.camera_fov = rospy.get_param('~camera_fov', '60')
+        self.stereo_baseline = rospy.get_param('~stereo_baseline', 0.2)
+        self.scene_id = rospy.get_param('~scene_id', '0')
+        self.use_sim = rospy.get_param('/use_sim_time', False)
+        self.speedup_factor = rospy.get_param('~speedup_factor', 1)
+        self.visualize = rospy.get_param("~visualize", False)
 
-def parse_metadata(data):
-  """ Parse metadata into a useful dictionary """
-  dict = {}
-  data_string = str(data)
-  split_data = data_string.split()
+        self.env = Env(simulation_ip=self.client_ip, own_ip=self.self_ip,
+                    position_port=self.position_port,
+                    metadata_port=self.metadata_port,
+                    image_port=self.image_port)
 
-  position = [float(split_data[5][3:-2]), float(split_data[6][3:-1]), float(split_data[7][3:-3])]
-  quaternion = [float(split_data[9][3:-2]), float(split_data[10][3:-1]), float(split_data[11][3:-1]), float(split_data[12][3:-3])]
-  velocity = [float(split_data[14][7:-2]), float(split_data[15][7:-1]), float(split_data[16][7:-3])]
-  ang_vel = [float(split_data[19][11:-2]), float(split_data[20][11:-1]), float(split_data[22][2:-3])]
-  acceleration = [float(split_data[24][8:-2]), float(split_data[25][8:-1]), float(split_data[26][8:-3])]
-  ang_acceleration = [float(split_data[29][12:-2]), float(split_data[30][12:-1]), float(split_data[31][12:-3])]
-  time = float(split_data[32][6:-7])
-  collision_status = True if split_data[34][8:-1] == 'true' else False
+        self.body_frame = 'base_link'
+        self.world_frame = 'world'
+        #TODO: change this to the correct vector once coordinate frame is fixed:
+        self.gravity_vector = [0.0, -9.81, 0.0] # in 'world' frame
 
-  dict['position'] = position
-  dict['quaternion'] = quaternion
-  dict['velocity'] = velocity
-  dict['ang_vel'] = ang_vel
-  dict['acceleration'] = acceleration
-  dict['ang_acceleration'] = ang_acceleration
-  dict['time'] = time
-  dict['collision_status'] = collision_status
+        self.bridge = CvBridge()
 
-  return dict
+        self.imu_rate = 100
+        self.image_rate = 20
 
-def metadata_to_odom(timestamp, metadata):
-  """ Transforms a metadata message to a ROS odometry message.
-  Requires a transform from body to map. (TODO remove hardcoded frame_id)
-  """
-  header = Header()
-  header.stamp = timestamp
-  odom = Odometry()
-  odom.header = header
-  odom.header.frame_id = "world"
+        # TODO use a dictionary for Camera, instead of enum, in msgs.py
+        # to avoid this potential issue
+        # TODO we also need to know frame_id, hardcoding for now, again
+        # use a more descriptive data structure.
+        self.cam_frame_id = ["left_cam", "right_cam", "left_cam", "left_cam"]
+        self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
+                 (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
+                 (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
+                 (Camera.DEPTH, Compression.OFF, Channels.THREE)]
 
-  odom.pose.pose.position.x =  metadata['position'][0]
-  odom.pose.pose.position.y =  metadata['position'][1]
-  odom.pose.pose.position.z =  metadata['position'][2]
+        self.left_image_pub = rospy.Publisher("left_cam", Image, queue_size=1)
+        self.right_image_pub = rospy.Publisher("right_cam", Image, queue_size=1)
+        self.segmented_image_pub = rospy.Publisher("segmentation", Image, queue_size=1)
+        self.depth_image_pub = rospy.Publisher("depth", Image, queue_size=1)
+        self.cam_info_left_pub = rospy.Publisher("left_cam/camera_info", CameraInfo, queue_size=10)
+        self.cam_info_right_pub = rospy.Publisher("right_cam/camera_info", CameraInfo, queue_size=10)
+        self.image_publishers = [self.left_image_pub, self.right_image_pub,
+                                 self.segmented_image_pub, self.depth_image_pub]
 
-  odom.pose.pose.orientation.x = metadata['quaternion'][0]
-  odom.pose.pose.orientation.y = metadata['quaternion'][1]
-  odom.pose.pose.orientation.z = metadata['quaternion'][2]
-  odom.pose.pose.orientation.w = metadata['quaternion'][3]
+        self.imu_pub = rospy.Publisher("imu", Imu, queue_size=1)
+        self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=1)
 
-  # Not needed for ground_truth_odometry for now.
-  odom.twist.twist.linear.x = metadata['velocity'][0]
-  odom.twist.twist.linear.y = metadata['velocity'][1]
-  odom.twist.twist.linear.z = metadata['velocity'][2]
+        # TODO: why use both br and static_br?
+        self.br = tf.TransformBroadcaster()
+        self.static_br = tf2_ros.StaticTransformBroadcaster()
+        self.transformer = tf.TransformerROS() # TODO: not using now, but it might be nicer than current implementation for imu msgs
 
-  odom.twist.twist.angular.x = metadata['ang_vel'][0]
-  odom.twist.twist.angular.y = metadata['ang_vel'][1]
-  odom.twist.twist.angular.z = metadata['ang_vel'][2]
+        # Set camera parameters once for the entire simulation:
+        for camera in self.cameras:
+            self.env.request(SetCameraParametersRequest(
+                                            self.camera_height,
+                                            self.camera_width,
+                                            self.camera_fov,
+                                            camera[0]))
+        self.cam_left_position = Point(-self.stereo_baseline / 2, 0.0, 0.0)
+        self.cam_right_position = Point(self.stereo_baseline / 2, 0.0, 0.0)
+        self.env.request(SetCameraPositionRequest(self.cam_left_position.x,
+                                                  self.cam_left_position.y,
+                                                  self.cam_left_position.z,
+                                                  Camera.RGB_LEFT))
+        self.env.request(SetCameraPositionRequest(self.cam_right_position.x,
+                                                  self.cam_right_position.y,
+                                                  self.cam_right_position.z,
+                                                  Camera.RGB_RIGHT))
 
-  return odom
-###############################################################
+        # Set position depth and segmentation cameras to align with left:
+        self.env.request(SetCameraPositionRequest(self.cam_left_position.x,
+                                                  self.cam_left_position.y,
+                                                  self.cam_left_position.z,
+                                                  Camera.DEPTH))
+        self.env.request(SetCameraPositionRequest(self.cam_left_position.x,
+                                                  self.cam_left_position.y,
+                                                  self.cam_left_position.z,
+                                                  Camera.SEGMENTATION))
 
-class Params():
-  def __init__(self):
-    pass
+        # Left cam static tf
+        self.static_tf_cam_left = TransformStamped()
+        self.static_tf_cam_left.header.frame_id = self.body_frame
+        self.static_tf_cam_left.transform.translation = self.cam_left_position
+        self.static_tf_cam_left.transform.rotation.x = 0
+        self.static_tf_cam_left.transform.rotation.y = 0
+        self.static_tf_cam_left.transform.rotation.z = 0
+        self.static_tf_cam_left.transform.rotation.w = 1.0
+        self.static_tf_cam_left.child_frame_id = self.cam_frame_id[0]
 
-  def parseParams(self):
-    # For connecting to Unity
-    self.client_ip    = rospy.get_param('~client_ip', '127.0.0.1')
-    self.self_ip      = rospy.get_param('~self_ip', '127.0.0.1')
-    self.request_port = rospy.get_param('~request_port', '9000')
-    self.receive_port = rospy.get_param('~receive_port', '9001')
+        # Right cam static tf
+        self.static_tf_cam_right = copy.deepcopy(self.static_tf_cam_left)
+        self.static_tf_cam_right.transform.translation = self.cam_right_position
+        self.static_tf_cam_right.child_frame_id = self.cam_frame_id[1]
 
-    # Simulation time
-    self.use_sim = rospy.get_param('/use_sim_time', False)
-    self.speedup_factor = rospy.get_param('~speedup_factor', 1)
+        # TODO: do we need tf's for depth and segmentation cams? I think no...
 
-class ImagePublisher:
-  def __init__(self, cameras):
-    # Store params
-    self.cameras = cameras
+        if self.visualize:
+            # the rviz frame is a 90 degree x-axis rotation from world.
+            self.static_tf_rviz = TransformStamped()
+            self.static_tf_rviz.header.frame_id = "world"
+            self.static_tf_rviz.transform.rotation.x = 0.7071068
+            self.static_tf_rviz.transform.rotation.y = 0.0
+            self.static_tf_rviz.transform.rotation.z = 0.0
+            self.static_tf_rviz.transform.rotation.w = 0.7071068
+            self.static_tf_rviz.child_frame_id = "rviz"
 
-    # Setup ROS interface: create a ROS image publisher for each camera
-    left_cam_pub = rospy.Publisher("left_cam", Image, queue_size=10)
-    right_cam_pub = rospy.Publisher("right_cam", Image, queue_size=10)
-    segmentation_pub = rospy.Publisher("segmentation", Image, queue_size=10)
-    depth_pub = rospy.Publisher("depth", Image, queue_size=10)
+        # Send scene request only if we don't want the default scene:
+        if self.scene_id != 0:
+            result = self.env.request(SceneRequest(self.scene_id))
 
-    self.publishers = [left_cam_pub, right_cam_pub, segmentation_pub, depth_pub]
-    self.len_publishers = len(self.publishers) # Cache number of publishers
+        # Camera_info publishing for VIO
+        self.cam_info_msg_left = CameraInfo()
+        self.cam_info_msg_right = CameraInfo()
+        self.generate_camera_info()
 
-    assert(len(self.cameras) == self.len_publishers)
 
-    self.bridge = CvBridge()
+        self.imu_counter = 0 # only needed for everything_cb
 
-  def publish(self, timestamp, cv_images):
-    # cv_images must be in the same order as the publishers!
-    # TODO use a dictionary for Camera, instead of enum, in msgs.py
-    # to avoid this potential issue
-    for i in range(len(cv_images)):
-      try:
-        # Transform cv2 image to ROS image, using appropriate encoding.
-        cam_channels = self.cameras[i][2]
-        if cam_channels == Channels.SINGLE:
-          img_msg = self.bridge.cv2_to_imgmsg(cv_images[i], "mono8")
-        elif cam_channels == Channels.THREE:
-          img_msg = self.bridge.cv2_to_imgmsg(cv_images[i], "bgr8")
-        else:
-          rospy.logerr('Wrong number of channels for camera: %i' % i)
+        # self.everything_timer = rospy.Timer(rospy.Duration(1.0/1000.0),
+        #                                         self.everything_cb)
+        # self.imu_timer = rospy.Timer(rospy.Duration(1.0/self.imu_rate),
+        #                                         self.imu_cb)
+        # self.image_timer = rospy.Timer(rospy.Duration(1.0/self.image_rate),
+        #                                         self.image_cb)
 
-        img_msg.header.stamp = timestamp
+        if self.use_sim:
+            self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
+            # self.clock_timer = rospy.Timer(rospy.Duration(1.0/1000.0),
+            #                                     self.clock_cb)
 
-        # Publish each image using the corresponding publisher.
-        if i < self.len_publishers:
-          self.publishers[i].publish(img_msg)
-        else:
-          rospy.logwarn('There are more images than ROS publishers!')
+        while not rospy.is_shutdown():
+            self.everything_cb(None)
 
-      except CvBridgeError as e:
-        print(e)
+    def everything_cb(self, event=None):
+        """ For running everything in one loop """
+        publish_factor = int(self.imu_rate/self.image_rate)
 
-def clock_cb(event):
-  #sim_time = rospy.Time.from_sec(time / speedup_factor)
-  #clock_pub.publish(sim_time)
-  pass
+        if self.use_sim:
+            try:
+                self.clock_cb(None)
+            except Exception as error:
+                print "failed clock cb: ", error
 
-def tesse_ros_bridge():
-    # Init ROS node, do this before parsing params.
-    rospy.init_node('tesse_ros_bridge', anonymous=True)
+        try:
+            self.imu_cb(None)
+            self.imu_counter += 1
+        except Exception as error:
+            print "failed imu_cb: ", error
 
-    # Parse ROS params.
-    params = Params()
-    params.parseParams()
+        if self.imu_counter >= publish_factor:
+            try:
+                self.image_cb(None)
+                self.imu_counter = 0
+            except Exception as error:
+                print "failed image_cb: ", error
+                # raise error
 
-    # Setup TESSE/Unity bridge
-    env = Env(params.client_ip, params.self_ip,
-              params.request_port, params.receive_port)
+    def imu_cb(self, event):
+        """ Publish IMU updates from simulator to ROS as well as odom info
+            and agent transform
+        """
+        metadata = self.get_metadata()
 
-    # Cameras in Unity to query.
-    cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.SINGLE),
-             (Camera.RGB_RIGHT, Compression.OFF, Channels.SINGLE),
-             (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
-             (Camera.DEPTH, Compression.OFF, Channels.SINGLE)]
+        # TODO (Marcus): this must make sense with what the simulator outputs
+        # We must keep the same time spacing between these msgs and the simulator's data.
+        # What happens if sim_time?
 
-    # Create ROS image publishers
-    image_pub = ImagePublisher(cameras)
+        timestamp = rospy.Time.from_sec(metadata['time'] / self.speedup_factor)
+        # timestamp = rospy.Time.now()
 
-    # Create camera info publishers
-    cam_info_left = rospy.Publisher("left_cam/camera_info", CameraInfo, queue_size = 10)
-    cam_info_right = rospy.Publisher("right_cam/camera_info", CameraInfo, queue_size = 10)
-    generate_cam_info_done = False # Flag to compute msg only once.
-    width = 640 #pixels
-    height = 480 #pixels
-    fov = 37.84929
-    f = (height / 2.0) / math.tan((math.pi * (fov / 180.0)) / 2.0);
-    fx = f #pixels
-    fy = f #pixels
-    cx = width / 2 #pixels
-    cy = height / 2 #pixels
-    baseline = 0.1
-    Tx = 0
-    Tx_right = -f * baseline ; # -fx' * B
-    Ty = 0
+        imu = self.metadata_to_imu(timestamp, metadata)
+        self.imu_pub.publish(imu)
 
-    cam_info_msg_left = make_camera_msg("left_cam", width, height, fx, fy, cx, cy, Tx, Ty)
-    cam_info_msg_right = make_camera_msg("right_cam", width, height, fx, fy, cx, cy, Tx_right, Ty)
+        odom = self.metadata_to_odom(timestamp, metadata)
+        self.odom_pub.publish(odom)
 
-    # Create Pose publisher
-    gt_odom_pub = rospy.Publisher("ground_truth_odometry", Odometry, queue_size = 10)
+        self.br.sendTransform(metadata['position'],
+                              metadata['quaternion'],
+                              timestamp,
+                              self.body_frame, self.world_frame) # Convention TFs
 
-    # Setup simulation time if requested
-    if params.use_sim:
-        clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
-        clock_timer = rospy.Timer(rospy.Duration(1.0/1000.0), clock_cb)
+        self.static_tf_cam_left.header.stamp = timestamp
+        self.static_tf_cam_right.header.stamp = timestamp
+        self.static_br.sendTransform(self.static_tf_cam_left)
+        self.static_br.sendTransform(self.static_tf_cam_right)
 
-    # Create Tf publisher
-    br = tf.TransformBroadcaster()
+        if self.visualize:
+            self.static_tf_rviz.header.stamp = timestamp
+            self.static_br.sendTransform(self.static_tf_rviz)
 
-    # Create data request packet
-    data_request = DataRequest(True, cameras);
+    def image_cb(self, event):
+        """ Publish images from simulator to ROS """
+        data_request = DataRequest(True, self.cameras)
+        data_response = self.env.request(data_request)
 
-    # TODO use Timers instead
-    rate = rospy.Rate(30) # In Hz
-    while not rospy.is_shutdown():
-      # GO AS FAST AS POSSIBLE HERE
+        # TODO (Marcus): this must make sense with what the simulator outputs
+        # We must keep the same time spacing between these msgs and the simulator's data.
+        # What happens if sim_time?
 
-      # Query images from Unity
-      data_response = env.request(data_request)
-      metadata = parse_metadata(data_response.data)
-      #timestamp = rospy.Time(metadata['time'])
-      timestamp = rospy.Time.now()
+        metadata = self.parse_metadata(data_response.metadata)
 
-      # Simulate time in ROS
-      if params.use_sim:
-        sim_time = rospy.Time.from_sec(metadata['time'] / params.speedup_factor)
-        clock_pub.publish(sim_time)
+        timestamp = rospy.Time.from_sec(metadata['time'] / self.speedup_factor)
+        # timestamp = rospy.Time.now()
 
-      # Create cam info message. Do only once.
-      #print(env.request(CameraInformationRequest()))
-      #if generate_cam_info_done:
-        #cam_info = env.request(CameraInformationRequest()))
-        #cam_info_msg = make_camera_msg(parse_cam_info_metadata(cam_info))
-      cam_info_msg_left.header.stamp = timestamp
-      cam_info_msg_right.header.stamp = timestamp
-      cam_info_left.publish(cam_info_msg_left)
-      cam_info_right.publish(cam_info_msg_right)
+        # TODO: clean this up once we verify what we want (RGB vs Mono)
+        for i in range(len(self.cameras)):
+            if self.cameras[i][0] == Camera.DEPTH:
+                depth_cam_data = self.env.request(CameraInformationRequest(self.cameras[i][0]))
+                parsed_depth_cam_data = self.parse_cam_data(depth_cam_data.metadata)
+                # TODO: Is this rescaling still required?
+                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i] * parsed_depth_cam_data['draw_distance']['far'], 'passthrough')
+            else:
+                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'rgb8')
 
-      # Publish images to ROS
-      image_pub.publish(timestamp, data_response.images)
+            img_msg.header.frame_id = self.cam_frame_id[i]
+            img_msg.header.stamp = timestamp
+            self.image_publishers[i].publish(img_msg)
 
-      # TODO publish cam info as well
+        self.cam_info_msg_left.header.stamp = timestamp
+        self.cam_info_msg_right.header.stamp = timestamp
+        self.cam_info_left_pub.publish(self.cam_info_msg_left)
+        self.cam_info_right_pub.publish(self.cam_info_msg_right)
 
-      # Publish pose (Not necessary)
-      # gt_odom_pub.publish(metadata_to_odom(timestamp, metadata))
+        self.br.sendTransform(metadata['position'],
+                              metadata['quaternion'],
+                              timestamp,
+                              self.body_frame, self.world_frame) # Convention TFs
 
-      # Publish tf
-      br.sendTransform(metadata['position'],
-                       metadata['quaternion'],
-                       timestamp,
-                       "base_link", "world") # Convention TFs
+    def clock_cb(self, event):
+        """ Publish simulated clock time """
+        metadata = self.get_metadata()
 
-      # Wait to keep desired frames per second.
-      rate.sleep()
+        sim_time = rospy.Time.from_sec(metadata['time'] / self.speedup_factor)
+        # sim_time = rospy.Time.now()
+        self.clock_pub.publish(sim_time)
+
+    def generate_camera_info(self):
+        """ Generate CameraInfo messages for left_cam and right_cam """
+        left_cam_data = self.env.request(
+                                    CameraInformationRequest(Camera.RGB_LEFT))
+        right_cam_data = self.env.request(
+                                    CameraInformationRequest(Camera.RGB_RIGHT))
+        parsed_left_cam_data = self.parse_cam_data(left_cam_data.metadata)
+        parsed_right_cam_data = self.parse_cam_data(right_cam_data.metadata)
+
+        # Required for Unity FOV scaling:
+        fov_vertical = self.camera_fov
+        fov_horizontal = np.rad2deg(2 * np.arctan(np.tan(np.deg2rad(fov_vertical) / 2) * self.camera_width / self.camera_height))
+        fx = (self.camera_width / 2.0) / np.tan(np.deg2rad(fov_horizontal) / 2.0)
+        fy = (self.camera_height / 2.0) / np.tan(np.deg2rad(fov_vertical) / 2.0)
+
+        cx = self.camera_width // 2 # pixels
+        cy = self.camera_height // 2 # pixels
+        baseline = np.abs(parsed_left_cam_data['position'][0] -
+                          parsed_right_cam_data['position'][0])
+        assert(baseline == self.stereo_baseline)
+        Tx = 0
+        Ty = 0
+        Tx_right = -fx * baseline
+
+        cam_info_msg_left = self.make_camera_msg("left_cam",
+                                                   self.camera_width,
+                                                   self.camera_height,
+                                                   fx, fy, cx, cy, Tx, Ty)
+        cam_info_msg_right = self.make_camera_msg("right_cam",
+                                                   self.camera_width,
+                                                   self.camera_height,
+                                                   fx, fy, cx, cy, Tx_right, Ty)
+
+        self.cam_info_msg_left = cam_info_msg_left
+        self.cam_info_msg_right = cam_info_msg_right
+
+    def get_metadata(self):
+        """ Return camera meta data object """
+        metadata_request = MetadataRequest()
+        metadata_response = self.env.request(metadata_request)
+
+        return self.parse_metadata(metadata_response.metadata)
+
+    # TODO utilities (should go in utils.py file in package):
+    ############################################################################
+
+    def parse_metadata(self, data):
+        """ Parse metadata into a useful dictionary """
+        # TODO: find a nicer way to traverse the tree
+        root = ET.fromstring(data)
+
+        dict = {}
+        dict['position'] = [float(root[0].attrib['x']),
+                            float(root[0].attrib['y']),
+                            float(root[0].attrib['z'])]
+
+        dict['quaternion'] = [float(root[1].attrib['x']),
+                              float(root[1].attrib['y']),
+                              float(root[1].attrib['z']),
+                              float(root[1].attrib['w'])]
+
+        dict['velocity'] = [float(root[2].attrib['x_dot']),
+                            float(root[2].attrib['y_dot']),
+                            float(root[2].attrib['z_dot'])]
+
+        dict['ang_vel'] = [np.deg2rad(float(root[3].attrib['x_ang_dot'])),
+                           np.deg2rad(float(root[3].attrib['y_ang_dot'])),
+                           np.deg2rad(float(root[3].attrib['z_ang_dot']))]
+
+        dict['acceleration'] = [float(root[4].attrib['x_ddot']),
+                                float(root[4].attrib['y_ddot']),
+                                float(root[4].attrib['z_ddot'])]
+
+        dict['ang_accel'] = [np.deg2rad(float(root[5].attrib['x_ang_ddot'])),
+                             np.deg2rad(float(root[5].attrib['y_ang_ddot'])),
+                             np.deg2rad(float(root[5].attrib['z_ang_ddot']))]
+
+        dict['time'] = float(root[6].text)
+
+        dict['collision_status'] = bool(root[7].attrib['status'])
+
+        return dict
+
+    def parse_cam_data(self, data):
+        """ Parse CameraInformationRequest data into a useful dictionary """
+        # TODO: find a nicer way to traverse the tree that isn't dependent
+        # on idices not changing over time.
+        root = ET.fromstring(data)
+        dict = {}
+
+        dict['name'] = str(root[0][0].text)
+
+        dict['id'] = int(root[0][1].text)
+
+        dict['parameters'] = {'width':int(root[0][2].attrib['width']),
+                              'height':int(root[0][2].attrib['height']),
+                              'fov':float(root[0][2].attrib['fov'])}
+
+        dict['position'] = [float(root[0][3].attrib['x']),
+                            float(root[0][3].attrib['y']),
+                            float(root[0][3].attrib['z'])]
+
+        dict['quaternion'] = [float(root[0][4].attrib['x']),
+                              float(root[0][4].attrib['y']),
+                              float(root[0][4].attrib['z']),
+                              float(root[0][4].attrib['w'])]
+
+        dict['draw_distance'] = {'far':float(root[0][5].attrib['far']),
+                                 'near':float(root[0][5].attrib['near'])}
+
+        return dict
+
+    def make_camera_msg(self, frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
+        camera_info_msg = CameraInfo()
+        camera_info_msg.header.frame_id = frame_id
+        camera_info_msg.width = width
+        camera_info_msg.height = height
+        camera_info_msg.K = [fx, 0, cx,
+                             0, fy, cy,
+                             0, 0, 1]
+        # No rectification
+        camera_info_msg.R = [1, 0, 0,
+                             0, 1, 0,
+                             0, 0, 1]
+        # No distortion
+        camera_info_msg.distortion_model = "plumb_bob"
+        camera_info_msg.D = [0, 0, 0, 0]
+
+        # Ty = 0 and Tx = -fx' * B, where B is the baseline between the cameras.
+        camera_info_msg.P = [fx, 0, cx, Tx,
+                             0, fy, cy, Ty,
+                             0, 0, 1, 0]
+        return camera_info_msg
+
+    def metadata_to_odom(self, timestamp, metadata):
+        """ Transforms a metadata message to a ROS odometry message.
+        Requires a transform from body to map.
+        """
+        header = Header()
+        header.stamp = timestamp
+        odom = Odometry()
+        odom.header = header
+        odom.header.frame_id = self.world_frame
+
+        odom.pose.pose.position.x =  metadata['position'][0]
+        odom.pose.pose.position.y =  metadata['position'][1]
+        odom.pose.pose.position.z =  metadata['position'][2]
+
+        odom.pose.pose.orientation.x = metadata['quaternion'][0]
+        odom.pose.pose.orientation.y = metadata['quaternion'][1]
+        odom.pose.pose.orientation.z = metadata['quaternion'][2]
+        odom.pose.pose.orientation.w = metadata['quaternion'][3]
+
+        # Not needed for ground_truth_odometry for now.
+        odom.twist.twist.linear.x = metadata['velocity'][0]
+        odom.twist.twist.linear.y = metadata['velocity'][1]
+        odom.twist.twist.linear.z = metadata['velocity'][2]
+
+        odom.twist.twist.angular.x = metadata['ang_vel'][0]
+        odom.twist.twist.angular.y = metadata['ang_vel'][1]
+        odom.twist.twist.angular.z = metadata['ang_vel'][2]
+
+        return odom
+
+    def metadata_to_imu(self, timestamp, metadata):
+        """ Transforms a metadata message to a ROS imu message.
+        Requires a transform from body to map.
+        """
+        imu = Imu()
+        imu.header.stamp = timestamp
+        imu.header.frame_id = self.body_frame
+
+        imu.angular_velocity.x = metadata['ang_vel'][0]
+        imu.angular_velocity.y = metadata['ang_vel'][1]
+        imu.angular_velocity.z = metadata['ang_vel'][2]
+
+        quat = np.array([metadata['quaternion'][0],
+                         metadata['quaternion'][1],
+                         metadata['quaternion'][2],
+                         metadata['quaternion'][3]]) # x,y,z,w
+
+        gravity_quat = np.array(self.gravity_vector + [0.0])
+        gravity_quat_bf = tf.transformations.quaternion_multiply(
+            tf.transformations.quaternion_multiply(quat, gravity_quat),
+            tf.transformations.quaternion_conjugate(quat)
+        )
+        gravity_bf = gravity_quat_bf[:3]
+
+        imu.linear_acceleration.x = metadata['acceleration'][0] + gravity_bf[0]
+        imu.linear_acceleration.y = metadata['acceleration'][1] + gravity_bf[1]
+        imu.linear_acceleration.z = metadata['acceleration'][2] + gravity_bf[2]
+
+        return imu
+
+    ############################################################################
 
 if __name__ == '__main__':
-    try:
-        tesse_ros_bridge()
-    except rospy.ROSInterruptException:
-        pass
+    rospy.init_node("TesseROSWrapper_node")
+    node = TesseROSWrapper()
+    # import cProfile
+    # cProfile.run('TesseROSWrapper()', '/home/marcus/TESS/ros_bridge_profile_3.cprof')
+
+    # rospy.spin()
