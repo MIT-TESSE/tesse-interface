@@ -27,7 +27,14 @@ from tesse.msgs import DataResponse
 
 
 class Env(object):
-    def __init__(self, simulation_ip, own_ip, position_port=9000, metadata_port=9001, image_port=9002):
+    def __init__(
+        self,
+        simulation_ip='localhost',
+        own_ip='localhost',
+        position_port=9000,
+        metadata_port=9001,
+        image_port=9002,
+    ):
         self.simulation_ip = simulation_ip
         self.own_ip = own_ip
         self.position_port = position_port

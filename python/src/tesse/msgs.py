@@ -83,11 +83,18 @@ class Transform(PositionMessage):
         super(Transform, self).__init__(('f', translate_x), ('f', translate_z), ('f', rotate_y))
 
 
-class AddRelativeForceAndTorque(PositionMessage):
-    __tag__ = 'xBFF'
+class AddForce(PositionMessage):
+    __tag__ = 'xBff'
 
-    def __init__(self, force_z=0, torque_y=0):
-        super(AddRelativeForceAndTorque, self).__init__(('f', force_z), ('f', torque_y))
+    def __init__(self, force_z=0, torque_y=0, force_x=0):
+        super(AddForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x))
+
+
+class AddStepForce(PositionMessage):
+    __tag__ = 'fBff'
+
+    def __init__(self, force_z=0, torque_y=0, force_x=0, duration=0):
+        super(AddStepForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x), ('f', duration))
 
 
 class Reposition(PositionMessage):
@@ -105,8 +112,22 @@ class Reposition(PositionMessage):
         )
 
 
+class SetHoverHeight(PositionMessage):
+    __tag__ = 'xSHh'
+
+    def __init__(self, height=2.5):
+        super(SetHoverHeight, self).__init__(('f', height))
+
+
 class Respawn(PositionMessage):
     __tag__ = 'RSPN'
+
+
+class SetFrameRate(PositionMessage):
+    __tag__ = 'fScR'
+
+    def __init__(self, frame_rate=0):
+        super(SetFrameRate, self).__init__(('I', frame_rate))
 
 
 class SceneRequest(PositionMessage):
