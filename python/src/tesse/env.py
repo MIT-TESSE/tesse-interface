@@ -34,38 +34,42 @@ class Env(object):
         position_port=9000,
         metadata_port=9001,
         image_port=9002,
-        request_port=9005,
+        step_port=9005,
     ):
         self.simulation_ip = simulation_ip
         self.own_ip = own_ip
         self.position_port = position_port
         self.metadata_port = metadata_port
         self.image_port = image_port
-        self.request_port = request_port
+        self.step_port = step_port
 
     def get_port(self, msg):
         if msg.get_interface() == Interface.POSITION:
             port = self.position_port
         elif msg.get_interface() == Interface.METADATA:
             port = self.metadata_port
-        elif msg.get_interface() == Interface.REQUEST:
-            port = self.request_port
-        else:
+        elif msg.get_interface() == Interface.IMAGE:
             port = self.image_port
+        elif msg.get_interface() == Interface.STEP:
+            port = self.step_port
+        else:
+            raise ValueError("Invalid message interface: {}".format(msg.get_interface()))
+
         return port
 
+
     def send(self, msg):
-        if self.get_port(msg) == self.request_port:
+        if self.get_port(msg) == self.step_port:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # tcp socket
             s.connect((self.simulation_ip, self.get_port(msg)))
             s.send(msg.encode())
             s.recv(3)
             s.close()
-
         else:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # udp socket
             s.sendto(msg.encode(), (self.simulation_ip, self.get_port(msg)))
             s.close()
+
 
     def request(self, msg, timeout=1):
         # setup receive socket

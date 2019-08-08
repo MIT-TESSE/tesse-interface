@@ -48,7 +48,7 @@ class Interface(Enum):
     POSITION = 0
     METADATA = 1
     IMAGE = 2
-    REQUEST = 3
+    STEP = 3
 
 
 class AbstractMessage:
@@ -89,13 +89,6 @@ class AddForce(PositionMessage):
 
     def __init__(self, force_z=0, torque_y=0, force_x=0):
         super(AddForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x))
-
-
-class AddStepForce(PositionMessage):
-    __tag__ = 'fBff'
-
-    def __init__(self, force_z=0, torque_y=0, force_x=0, duration=0):
-        super(AddStepForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x), ('f', duration))
 
 
 class Reposition(PositionMessage):
@@ -260,16 +253,22 @@ class DataResponse(object):
         self.metadata = metadata.tobytes().decode('utf-8')  # python 2/3
 
 
-# REQUEST INTERFACE
+# STEP INTERFACE
 
-class RequestMessage(AbstractMessage):
-    __interface__ = Interface.REQUEST
+class StepMessage(AbstractMessage):
+    __interface__ = Interface.STEP
 
     def __init__(self, *message_contents):
-        super(RequestMessage, self).__init__(*message_contents)
+        super(StepMessage, self).__init__(*message_contents)
 
-class RequestAddForce(RequestMessage):
+class StepWithForce(StepMessage):
     __tag__ = 'fBff'
 
     def __init__(self, force_z=0, torque_y=0, force_x=0, duration=0):
-        super(RequestAddForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x), ('f', duration))
+        super(StepWithForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x), ('f', duration))
+
+class StepWithTransform(StepMessage):
+    __tag__ = 'tlpt'
+
+    def __init__(self, translate_x=0, translate_z=0, rotate_y=0):
+        super(StepWithTransform, self).__init__(('f', translate_x), ('f', translate_z), ('f', rotate_y))
