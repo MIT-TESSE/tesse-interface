@@ -48,6 +48,7 @@ class Interface(Enum):
     POSITION = 0
     METADATA = 1
     IMAGE = 2
+    REQUEST = 3
 
 
 class AbstractMessage:
@@ -257,3 +258,18 @@ class DataResponse(object):
     def _decode_metadata(self, metadata=None):
         # self.metadata = bytes(metadata).decode('utf-8')  # python 3
         self.metadata = metadata.tobytes().decode('utf-8')  # python 2/3
+
+
+# REQUEST INTERFACE
+
+class RequestMessage(AbstractMessage):
+    __interface__ = Interface.REQUEST
+
+    def __init__(self, *message_contents):
+        super(RequestMessage, self).__init__(*message_contents)
+
+class RequestAddForce(RequestMessage):
+    __tag__ = 'fBff'
+
+    def __init__(self, force_z=0, torque_y=0, force_x=0, duration=0):
+        super(RequestAddForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x), ('f', duration))
