@@ -128,16 +128,6 @@ class TesseROSWrapper:
 
         # TODO: do we need tf's for depth and segmentation cams? I think no...
 
-        if self.visualize:
-            # the rviz frame is a 90 degree x-axis rotation from world.
-            self.static_tf_rviz = TransformStamped()
-            self.static_tf_rviz.header.frame_id = "world"
-            self.static_tf_rviz.transform.rotation.x = 0.7071068
-            self.static_tf_rviz.transform.rotation.y = 0.0
-            self.static_tf_rviz.transform.rotation.z = 0.0
-            self.static_tf_rviz.transform.rotation.w = 0.7071068
-            self.static_tf_rviz.child_frame_id = "rviz"
-
         # Camera_info publishing for VIO
         self.cam_info_msg_left = CameraInfo()
         self.cam_info_msg_right = CameraInfo()
@@ -221,10 +211,6 @@ class TesseROSWrapper:
         self.static_tf_cam_right.header.stamp = timestamp
         self.static_br.sendTransform(self.static_tf_cam_left)
         self.static_br.sendTransform(self.static_tf_cam_right)
-
-        if self.visualize:
-            self.static_tf_rviz.header.stamp = timestamp
-            self.static_br.sendTransform(self.static_tf_rviz)
 
     def image_cb(self, event):
         """ Publish images from simulator to ROS """
