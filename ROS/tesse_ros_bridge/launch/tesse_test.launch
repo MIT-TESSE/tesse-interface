@@ -12,7 +12,6 @@
   <!-- Sim arguments -->
   <arg name="use_sim" default="false"/>
   <arg name="speedup_factor" default="1"/>
-  <arg name="scene_id" default="0"/>
 
   <!-- Network arguments -->
   <arg name="client_ip" default="127.0.0.1"/>
@@ -30,7 +29,7 @@
   </rosparam>
 
   <node ns="$(arg ns)" name="tesse_ros_bridge" pkg="tesse_ros_bridge"
-        type="tesse_ros_bridge.py" output="screen">
+        type="tesse_ros_node.py" output="screen">
     <!-- Topics -->
     <remap from="left_cam"     to="left_cam"/>
     <remap from="right_cam"    to="right_cam"/>
@@ -45,7 +44,6 @@
     <param name="image_port" value="9002"/>
 
     <!-- Simulator params -->
-    <param name="scene_id" value="$(arg scene_id)"/>
     <param name="visualize" value="$(arg visualize)"/>
 
     <!-- Camera params -->
