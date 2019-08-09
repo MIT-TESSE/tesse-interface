@@ -2,6 +2,7 @@
 
 import numpy as np
 import copy
+import xml.etree.ElementTree as ET
 
 import cv2
 
@@ -15,9 +16,10 @@ from geometry_msgs.msg import Pose, PoseStamped, Point, PointStamped, TransformS
 from rosgraph_msgs.msg import Clock
 from cv_bridge import CvBridge, CvBridgeError
 
+from tesse_ros_bridge.srv import SceneRequestService
+
 from tesse.msgs import *
 from tesse.env import *
-import xml.etree.ElementTree as ET
 
 class TesseROSWrapper:
 
@@ -31,7 +33,6 @@ class TesseROSWrapper:
         self.camera_height = rospy.get_param('~camera_height', '320')
         self.camera_fov = rospy.get_param('~camera_fov', '60')
         self.stereo_baseline = rospy.get_param('~stereo_baseline', 0.2)
-        self.scene_id = rospy.get_param('~scene_id', '0')
         self.use_sim = rospy.get_param('/use_sim_time', False)
         self.speedup_factor = rospy.get_param('~speedup_factor', 1)
         self.visualize = rospy.get_param("~visualize", False)
@@ -56,8 +57,8 @@ class TesseROSWrapper:
         # TODO we also need to know frame_id, hardcoding for now, again
         # use a more descriptive data structure.
         self.cam_frame_id = ["left_cam", "right_cam", "left_cam", "left_cam"]
-        self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.THREE),
-                 (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
+        self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.SINGLE),
+                 (Camera.RGB_RIGHT, Compression.OFF, Channels.SINGLE),
                  (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
                  (Camera.DEPTH, Compression.OFF, Channels.THREE)]
 
@@ -69,6 +70,10 @@ class TesseROSWrapper:
         self.cam_info_right_pub = rospy.Publisher("right_cam/camera_info", CameraInfo, queue_size=10)
         self.image_publishers = [self.left_image_pub, self.right_image_pub,
                                  self.segmented_image_pub, self.depth_image_pub]
+
+        self.scene_request_service = rospy.Service("scene_change_request",
+                                                    SceneRequestService,
+                                                    self.change_scene)
 
         self.imu_pub = rospy.Publisher("imu", Imu, queue_size=1)
         self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=1)
@@ -123,20 +128,6 @@ class TesseROSWrapper:
 
         # TODO: do we need tf's for depth and segmentation cams? I think no...
 
-        if self.visualize:
-            # the rviz frame is a 90 degree x-axis rotation from world.
-            self.static_tf_rviz = TransformStamped()
-            self.static_tf_rviz.header.frame_id = "world"
-            self.static_tf_rviz.transform.rotation.x = 0.7071068
-            self.static_tf_rviz.transform.rotation.y = 0.0
-            self.static_tf_rviz.transform.rotation.z = 0.0
-            self.static_tf_rviz.transform.rotation.w = 0.7071068
-            self.static_tf_rviz.child_frame_id = "rviz"
-
-        # Send scene request only if we don't want the default scene:
-        if self.scene_id != 0:
-            result = self.env.request(SceneRequest(self.scene_id))
-
         # Camera_info publishing for VIO
         self.cam_info_msg_left = CameraInfo()
         self.cam_info_msg_right = CameraInfo()
@@ -184,6 +175,14 @@ class TesseROSWrapper:
                 print "failed image_cb: ", error
                 # raise error
 
+    def change_scene(self, req):
+        """ Change scene ID of simulator as a ROS service """
+        try:
+            result = self.env.request(SceneRequest(req.id))
+            return True
+        except:
+            return False
+
     def imu_cb(self, event):
         """ Publish IMU updates from simulator to ROS as well as odom info
             and agent transform
@@ -213,10 +212,6 @@ class TesseROSWrapper:
         self.static_br.sendTransform(self.static_tf_cam_left)
         self.static_br.sendTransform(self.static_tf_cam_right)
 
-        if self.visualize:
-            self.static_tf_rviz.header.stamp = timestamp
-            self.static_br.sendTransform(self.static_tf_rviz)
-
     def image_cb(self, event):
         """ Publish images from simulator to ROS """
         data_request = DataRequest(True, self.cameras)
@@ -238,6 +233,8 @@ class TesseROSWrapper:
                 parsed_depth_cam_data = self.parse_cam_data(depth_cam_data.metadata)
                 # TODO: Is this rescaling still required?
                 img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i] * parsed_depth_cam_data['draw_distance']['far'], 'passthrough')
+            elif self.cameras[i][2] == Channels.SINGLE:
+                img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'mono8')
             else:
                 img_msg = self.bridge.cv2_to_imgmsg(data_response.images[i], 'rgb8')
 
