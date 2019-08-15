@@ -6,27 +6,32 @@
 
 <launch>
   <arg name="ns" default="tesse"/>
-  <arg name="publish_point_clouds" default="true"/>
-  <arg name="visualize" default="true"/>
-
-  <!-- Sim arguments -->
-  <arg name="use_sim" default="false"/>
-  <arg name="speedup_factor" default="1"/>
+  <arg name="publish_point_clouds"  default="false"/>
+  <arg name="visualize"             default="false"/>
 
   <!-- Network arguments -->
-  <arg name="client_ip" default="127.0.0.1"/>
-  <arg name="self_ip" default="127.0.0.1"/>
+  <arg name="client_ip"             default="127.0.0.1"/>
+  <arg name="self_ip"               default="127.0.0.1"/>
 
   <!-- Camera arguments -->
-  <arg name="fov" default="37.84929"/>
-  <arg name="width" default="720"/>
-  <arg name="height" default="480"/>
-  <arg name="stereo_baseline" default="0.1"/>
+  <arg name="fov"                   default="37.84929"/>
+  <arg name="width"                 default="720"/>
+  <arg name="height"                default="480"/>
+  <arg name="stereo_baseline"       default="0.1"/>
+
+  <!-- Sim arguments -->
+  <arg name="use_sim_time"          default="true"/>
+  <arg name="speedup_factor"        default="1"/>
+  <arg name="frame_rate"            default="20.0"/>
+  <arg name="imu_rate"              default="200"/>
+
+  <!-- Frame arguments -->
+  <arg name="world_frame_id"        default="world"/>
+  <arg name="body_frame_id"         default="base_link"/>
+
 
   <!-- If use_sim, simulator will publish clock modified by speedup_factor -->
-  <rosparam if='$(arg use_sim)'>
-    use_sim_time: true
-  </rosparam>
+  <param name="use_sim_time" value="$(arg use_sim_time)"/>
 
   <node ns="$(arg ns)" name="tesse_ros_bridge" pkg="tesse_ros_bridge"
         type="tesse_ros_node.py" output="screen">
@@ -37,23 +42,28 @@
     <remap from="depth"        to="depth"/>
 
     <!-- Network Unity params -->
-    <param name="client_ip" value="$(arg client_ip)"/>
-    <param name="self_ip" value="$(arg self_ip)"/>
-    <param name="position_port" value="9000"/>
-    <param name="metadata_port" value="9001"/>
-    <param name="image_port" value="9002"/>
-
-    <!-- Simulator params -->
-    <param name="visualize" value="$(arg visualize)"/>
+    <param name="client_ip"       value="$(arg client_ip)"/>
+    <param name="self_ip"         value="$(arg self_ip)"/>
+    <param name="position_port"   value="9000"/>
+    <param name="metadata_port"   value="9001"/>
+    <param name="image_port"      value="9002"/>
+    <param name="udp_port"        value="9004"/>
+    <param name="step_port"       value="9005"/>
 
     <!-- Camera params -->
-    <param name="camera_width" value="$(arg width)"/>
-    <param name="camera_height" value="$(arg height)"/>
-    <param name="camera_fov" value="$(arg fov)"/>
+    <param name="camera_width"    value="$(arg width)"/>
+    <param name="camera_height"   value="$(arg height)"/>
+    <param name="camera_fov"      value="$(arg fov)"/>
     <param name="stereo_baseline" value="$(arg stereo_baseline)"/>
 
-    <!-- For simulated time -->
+    <!-- Simulator and speed parameters -->
     <param name="speedup_factor" value="$(arg speedup_factor)"/>
+    <param name="frame_rate" value="$(arg frame_rate)"/>
+    <param name="imu_rate" value="$(arg imu_rate)"/>
+
+    <!-- Frame parameters -->
+    <param name="world_frame_id" value="$(arg world_frame_id)"/>
+    <param name="body_frame_id" value="$(arg body_frame_id)"/>
   </node>
 
   <group if="$(arg publish_point_clouds)">
@@ -119,8 +129,4 @@
     <node pkg="rviz" type="rviz" name="rviz"
           args="-d $(find tesse_ros_bridge)/rviz/tesse_semantic_without_voxblox.rviz"/>
   </group>
-
-  <!-- Publish a modified transform for an RVIZ frame  -->
-  <node pkg="tf2_ros" type="static_transform_publisher" name="rviz_tf_pub"
-        args="0 0 0 0.7071068 0 0 0.7071068 world rviz" />
 </launch>

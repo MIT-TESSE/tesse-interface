@@ -3,8 +3,8 @@ project(tesse_ros_bridge)
 
 find_package(catkin_simple REQUIRED)
 
+catkin_python_setup()
 catkin_simple()
-# catkin_python_setup()
 
 cs_install()
 # cs_install_scripts(scripts/tesse_ros_bridge.py)

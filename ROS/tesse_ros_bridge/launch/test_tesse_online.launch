@@ -1,0 +1,35 @@
+<launch>
+  <arg name="ns" default="tesse"/>
+  <arg name="publish_point_clouds" default="false"/>
+  <arg name="visualize" default="false"/>
+
+  <!-- Network arguments -->
+  <arg name="client_ip" default="127.0.0.1"/>
+  <arg name="self_ip" default="127.0.0.1"/>
+
+  <!-- Camera arguments -->
+  <arg name="fov" default="37.84929"/>
+  <arg name="width" default="720"/>
+  <arg name="height" default="480"/>
+  <arg name="stereo_baseline" default="0.1"/>
+
+  <!-- Sim arguments -->
+  <arg name="use_sim_time" default="true"/>
+  <arg name="speedup_factor" default="1"/>
+  <arg name="frame_rate" default="20.0"/>
+  <arg name="imu_rate" default="200"/>
+
+  <!-- Output arguments -->
+  <arg name="world_frame_id" default="world"/>
+  <arg name="body_frame_id" default="base_link"/>
+
+  <include file="$(find tesse_ros_bridge)/launch/tesse_bridge.launch"
+           pass_all_args="true"/>
+
+  <node ns="$(arg ns)" pkg="tesse_ros_bridge" type="test_integration_node.py"
+        name="tesse_test_node" output="screen">
+    <param name="world_frame_id" value="$(arg world_frame_id)"/>
+    <param name="body_frame_id" value="$(arg body_frame_id)"/>
+  </node>
+
+</launch>

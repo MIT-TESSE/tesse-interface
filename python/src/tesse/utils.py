@@ -3,8 +3,8 @@ import threading
 import time
 
 class UdpListener(threading.Thread):
-    def __init__(self, host='<broadcast>', port=None, timeout=0.01, rate=None):
-        """Initializer for UdpListener object.
+    def __init__(self, host='<broadcast>', port=None, timeout=0.1, rate=None):
+        """ Initializer for UdpListener object.
 
             Derived from a threading.Thread object, UdpListener will spin off
             a new thread and listen for data coming in on a specified port.
@@ -24,7 +24,10 @@ class UdpListener(threading.Thread):
                     which will send data to the callbacks as fast as possible.
         """
         super(UdpListener, self).__init__()
-        self.rate = rate
+        if rate>=200 or rate is None:
+            self.rate = None
+        else:
+            self.rate = rate
 
         # get ip address
         if host is None:
@@ -45,7 +48,7 @@ class UdpListener(threading.Thread):
         self.handlers = {}
 
     def subscribe(self, name, handler):
-        """Adds custom callback function to dictionary of subscribers.
+        """ Adds custom callback function to dictionary of subscribers.
 
             Args:
                 name: A string representing the unique name of the callback.
@@ -55,13 +58,13 @@ class UdpListener(threading.Thread):
         self.handlers[name] = handler
 
     def join(self, timeout=1):
-        """Safely close thread and unbind socket."""
+        """ Safely close thread and unbind socket. """
         self.alive.clear()
         threading.Thread.join(self, timeout)
         self.sock.close()
 
     def run(self):
-        """Main loop for receiving data and calling callbacks."""
+        """ Main loop for receiving data and calling callbacks. """
         start = time.time()
         while self.alive.isSet():
             try:
