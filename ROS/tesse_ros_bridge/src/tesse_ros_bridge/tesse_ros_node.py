@@ -216,7 +216,7 @@ class TesseROSWrapper:
                 # Publish images to appropriate topic.
                 img_msg.header.frame_id = self.cam_frame_id[i]
                 img_msg.header.stamp = timestamp
-                self.image_publishers[i].publish(img_msg)
+                self.img_pubs[i].publish(img_msg)
 
             # Publish both CameraInfo messages.
             self.cam_info_msg_left.header.stamp = timestamp
