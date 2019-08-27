@@ -3,16 +3,10 @@ project(tesse_ros_bridge)
 
 find_package(catkin_simple REQUIRED)
 
-catkin_simple()
 catkin_python_setup()
+catkin_simple()
 
-#cs_add_library(example_library src/example-library.cc)
-
-#cs_add_executable(example_executable src/main.cc)
-#target_link_libraries(example_executable example_library)
-
-#cs_install()
-
-cs_install_scripts(scripts/tesse_ros_bridge.py)
+cs_install()
+# cs_install_scripts(scripts/tesse_ros_bridge.py)
 
 cs_export()
