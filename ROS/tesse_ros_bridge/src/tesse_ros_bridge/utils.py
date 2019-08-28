@@ -174,9 +174,9 @@ def metadata_to_imu(processed_metadata, timestamp, frame_id):
     enu_R_brh = processed_metadata['transform'][:3,:3]
     g_brh = np.transpose(enu_R_brh).dot(gravity_enu)
 
-    imu.linear_acceleration.x = processed_metadata['acceleration'][0] + g_brh[0]
-    imu.linear_acceleration.y = processed_metadata['acceleration'][1] + g_brh[1]
-    imu.linear_acceleration.z = processed_metadata['acceleration'][2] + g_brh[2]
+    imu.linear_acceleration.x = processed_metadata['acceleration'][0] - g_brh[0]
+    imu.linear_acceleration.y = processed_metadata['acceleration'][1] - g_brh[1]
+    imu.linear_acceleration.z = processed_metadata['acceleration'][2] - g_brh[2]
 
     return imu
 
