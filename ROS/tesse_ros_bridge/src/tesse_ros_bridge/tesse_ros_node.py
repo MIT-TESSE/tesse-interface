@@ -111,6 +111,7 @@ class TesseROSWrapper:
         self.udp_listener = UdpListener(port=self.udp_port, rate=self.imu_rate)
         self.udp_listener.subscribe('udp_subcriber', self.udp_cb)
 
+
         # Simulated time requires that we constantly publish to '/clock'.
         self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
 
@@ -156,9 +157,11 @@ class TesseROSWrapper:
         metadata = tesse_ros_bridge.utils.parse_metadata(data)
         metadata_processed = tesse_ros_bridge.utils.process_metadata(metadata,
             self.prev_time, self.prev_vel_brh)
+        assert(self.prev_time < metadata_processed['time'])
         self.prev_time = metadata_processed['time']
         self.prev_vel_brh = metadata_processed['velocity']
 
+        assert(self.speedup_factor)
         timestamp = rospy.Time.from_sec(
             metadata_processed['time'] / self.speedup_factor)
 
@@ -205,6 +208,7 @@ class TesseROSWrapper:
             # self.prev_time = metadata_processed['time']
             # self.prev_vel_brh = metadata_processed['velocity']
 
+            assert(self.speedup_factor)
             timestamp = rospy.Time.from_sec(
                 metadata_processed['time'] / self.speedup_factor)
 
