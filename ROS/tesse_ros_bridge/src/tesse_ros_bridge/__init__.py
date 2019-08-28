@@ -2,14 +2,15 @@
 import numpy as np
 
 # Module-scoped transformation matrices:
-unity_T_enu = np.array([[1,0,0,0],
+# TODO(marcus): naming conventions!!!
+enu_T_unity = np.array([[1,0,0,0],
                         [0,0,1,0],
                         [0,1,0,0],
                         [0,0,0,1]])
 
-lh_T_rh = np.array([[1,0,0,0],
-                    [0,-1,0,0],
-                    [0,0,1,0],
-                    [0,0,0,1]])
+brh_T_blh = np.array([[1,0,0,0],
+                      [0,-1,0,0],
+                      [0,0,1,0],
+                      [0,0,0,1]])
 
-gravity_vector = [0.0, 0.0, -9.81] # in 'world' frame
+gravity_enu = [0.0, 0.0, -9.81] # in 'world' frame

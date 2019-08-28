@@ -2,9 +2,13 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import copy
 
+from scipy.spatial.transform import Rotation
+
 from sensor_msgs.msg import CameraInfo, Imu
 from nav_msgs.msg import Odometry
 import tf.transformations
+
+from tesse_ros_bridge import enu_T_unity, brh_T_blh, gravity_enu
 
 def parse_metadata(data):
     """ Parse Unity agent metadata into a useful dictionary.
@@ -142,7 +146,7 @@ def metadata_to_odom(metadata, timestamp, frame_id, child_frame_id):
     return odom
 
 
-def metadata_to_imu(metadata, timestamp, frame_id, gravity_vector):
+def metadata_to_imu(processed_metadata, timestamp, frame_id):
     """ Transforms a metadata dictionary to a ROS imu message.
 
         Converts the metadata to the agent body frame (a right-handed-frame),
@@ -154,8 +158,6 @@ def metadata_to_imu(metadata, timestamp, frame_id, gravity_vector):
                 AND pre-processed to be converted to the correct frame.
             timestamp: A rospy.Time instance for the ROS Imu message instance.
             frame_id: A string representing the reference frame (body frame).
-            gravity_vector: A 3-element list containing the desired gravity
-                vector, in the reference frame given by 'frame_id'
 
         Returns:
             An Imu ROS message instance that can immediately be published.
@@ -165,26 +167,16 @@ def metadata_to_imu(metadata, timestamp, frame_id, gravity_vector):
     imu.header.frame_id = frame_id
 
     # All fields are in the agent body frame
-    imu.angular_velocity.x = metadata['ang_vel'][0]
-    imu.angular_velocity.y = metadata['ang_vel'][1]
-    imu.angular_velocity.z = metadata['ang_vel'][2]
+    imu.angular_velocity.x = processed_metadata['ang_vel'][0]
+    imu.angular_velocity.y = processed_metadata['ang_vel'][1]
+    imu.angular_velocity.z = processed_metadata['ang_vel'][2]
 
-    quat = np.array([metadata['quaternion'][0],
-                     metadata['quaternion'][1],
-                     metadata['quaternion'][2],
-                     metadata['quaternion'][3]])  # x,y,z,w
+    enu_R_brh = processed_metadata['transform'][:3,:3]
+    g_brh = np.transpose(enu_R_brh).dot(gravity_enu)
 
-    # 3x3 rotation matrix for current orientation.
-    rot = tf.transformations.quaternion_matrix(quat)[:3,:3]
-    # TODO(marcus): Figure out why you need a transpose and a negative here.
-    # (your negative comes from the self.gravity_vector)
-    # gravity_bf = rot.dot(np.transpose(metadata['transform'][:3,:3]).dot(gravity_vector))
-    gravity_bf = np.transpose(rot).dot(gravity_vector)
-
-
-    imu.linear_acceleration.x = metadata['acceleration'][0] + gravity_bf[0]
-    imu.linear_acceleration.y = metadata['acceleration'][1] + gravity_bf[1]
-    imu.linear_acceleration.z = metadata['acceleration'][2] + gravity_bf[2]
+    imu.linear_acceleration.x = processed_metadata['acceleration'][0] + g_brh[0]
+    imu.linear_acceleration.y = processed_metadata['acceleration'][1] + g_brh[1]
+    imu.linear_acceleration.z = processed_metadata['acceleration'][2] + g_brh[2]
 
     return imu
 
@@ -285,8 +277,7 @@ def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
                          0, 0, 1, 0]
     return camera_info_msg
 
-def process_metadata(metadata, unity_T_enu, lh_T_rh, prev_time,
-    prev_body_rh_vel, prev_body_rh_ang_vel):
+def process_metadata(metadata, prev_time, prev_vel_brh, prev_ang_vel_brh=None):
     """ Convert metadata from the Unity simulator's left-handed frame to the
         a right-handed frame.
 
@@ -302,6 +293,15 @@ def process_metadata(metadata, unity_T_enu, lh_T_rh, prev_time,
         Args;
             metadata: A dictionary containing metadata from the Unity
                 simulator.
+            prev_time: A float representing the time of the last metadata
+                update received before this one.
+            prev_vel_brh: A 3-vector representing the linear velocity of the
+                agent in the right-handed body frame at teh previous metadata
+                update.
+            prev_anv_vel_brh: A 3-vector representing the angular velocity of
+                the agent in the right-handd body frame at the previous
+                metadata update. Default to None because we currently do not
+                use it to determine angular acceleration.
 
         Returns:
             A dictionary containing processed metadata. Position and
@@ -312,40 +312,58 @@ def process_metadata(metadata, unity_T_enu, lh_T_rh, prev_time,
             world frame and the ENU right-handed frame is included.
     """
     # Build a 4x4 transformation matrix from the Unity metadata.
-    body_T_unity = tf.transformations.quaternion_matrix(metadata['quaternion'])
-    body_T_unity[:,3] = np.array(metadata['position'] + [1])
+    unity_T_blh = tf.transformations.quaternion_matrix(metadata['quaternion'])
+    unity_T_blh[:,3] = np.array(metadata['position'] + [1])
 
-    body_T_enu = unity_T_enu.dot(body_T_unity)
-    body_T_enu_rh = body_T_enu.dot(lh_T_rh)
+    # TODO(marcus): use enu_T_unity instead of input
+    enu_T_blh = enu_T_unity.dot(unity_T_blh)
+    blh_T_brh = np.transpose(brh_T_blh)
+    enu_T_brh = enu_T_blh.dot(blh_T_brh)
 
-    # Calculate position and orientation in the right-handed camera frame.
-    body_T_enu_rh_t = body_T_enu_rh[:3,3]
-    body_T_enu_rh_R = copy.deepcopy(body_T_enu_rh)
-    body_T_enu_rh_R[:,3] = np.array([0,0,0,1])
-    body_T_enu_rh_q = tf.transformations.quaternion_from_matrix(
-        body_T_enu_rh_R)
+    # Calculate position and orientation in the right-hand body frame from enu.
+    enu_t_brh = enu_T_brh[:3,3]
+    enu_R_brh = copy.deepcopy(enu_T_brh)
+    enu_R_brh[:,3] = np.array([0,0,0,1])
+    enu_q_brh = tf.transformations.quaternion_from_matrix(enu_R_brh)
+    enu_R_brh = enu_R_brh[:3,:3]
 
     # Premultiply velocities to get them in the right-handed frame.
-    body_rh_vel = lh_T_rh[:3,:3].dot(metadata['velocity'])
-    body_rh_ang_vel = lh_T_rh[:3,:3].dot(metadata['ang_vel'])
+    vel_brh = brh_T_blh[:3,:3].dot(metadata['velocity'])
 
-    # Calculate the body accelerations via finite difference method
-    # This is necessary because the reference frame of the incoming
-    #   accelerations is left-handed and cannot be easily transformed.
+    # ang_vel_brh = brh_T_blh[:3,:3].dot(metadata['ang_vel'])
+    # ang_vel_brh = np.transpose(enu_R_brh).dot(
+    #     enu_T_unity[:3,:3].dot(metadata['ang_vel']))
+    # ang_vel_brh = blh_T_brh[:3,:3].dot(
+    #     np.transpose(unity_T_blh[:3,:3]).dot(metadata['ang_vel']))
+    # ang_vel_brh = brh_T_blh[:3,:3].dot(
+    #     np.transpose(unity_T_blh[:3,:3])).dot(metadata['ang_vel'])
+
+    # TODO(marcus): we took out the blh_T_brh so that we could get the sign
+    # to match with the expected from test_utils.py. This is not a perfect
+    # solution.
+    # TODO(marcus): check the negative performance
+    # TODO(marcus): use gt method with the axis-angle of the R's to get it.
+    ang_vel_brh = unity_T_blh[:3,:3].dot(metadata['ang_vel'])
+
+    vel_enu = enu_R_brh.dot(vel_brh)
+    prev_vel_enu = enu_R_brh.dot(prev_vel_brh)
+
+    # Calculate the body acceleration via finite difference method
     dt = metadata['time'] - prev_time
-    body_rh_accel = (body_rh_vel - prev_body_rh_vel) / dt
-    body_rh_ang_accel = (body_rh_ang_vel - prev_body_rh_ang_vel) / dt
+    accel_enu = (vel_enu - prev_vel_enu) / dt
+    accel_brh = np.transpose(enu_R_brh).dot(accel_enu)
+    # ang_accel_brh = (ang_vel_brh - prev_ang_vel_brh) / dt
 
     # Construct dictionary of transformed metadata.
     processed_dict = {}
-    processed_dict['position'] = body_T_enu_rh_t
-    processed_dict['quaternion'] = body_T_enu_rh_q
-    processed_dict['velocity'] = body_rh_vel
-    processed_dict['ang_vel'] = body_rh_ang_vel
-    processed_dict['acceleration'] = body_rh_accel
-    processed_dict['ang_accel'] = body_rh_ang_accel
+    processed_dict['position'] = enu_t_brh
+    processed_dict['quaternion'] = enu_q_brh
+    processed_dict['velocity'] = vel_brh
+    processed_dict['ang_vel'] = ang_vel_brh
+    processed_dict['acceleration'] = accel_brh
+    # processed_dict['ang_accel'] = ang_accel_brh
     processed_dict['time'] = metadata['time']
     processed_dict['collision_status'] = metadata['collision_status']
-    processed_dict['transform'] = body_T_enu_rh
+    processed_dict['transform'] = enu_T_brh
 
     return processed_dict

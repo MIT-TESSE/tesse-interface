@@ -12,7 +12,7 @@ from std_msgs.msg import Header
 from sensor_msgs.msg import Image, Imu, CameraInfo
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose, PoseStamped, Point, \
-     PointStamped, TransformStamped
+     PointStamped, TransformStamped, Twist
 from rosgraph_msgs.msg import Clock
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -27,6 +27,10 @@ from tesse.utils import *
 class TesseROSWrapper:
 
     def __init__(self):
+        # Interface parameters:
+        self.teleop_enabled = rospy.get_param("~teleop", False)
+        self.step_mode_enabled = rospy.get_param("~enable_step_mode", False)
+
         # Networking parameters:
         self.client_ip = rospy.get_param("~client_ip", "127.0.0.1")
         self.self_ip = rospy.get_param("~self_ip", "127.0.0.1")
@@ -58,11 +62,6 @@ class TesseROSWrapper:
                         metadata_port=self.metadata_port,
                         image_port=self.image_port,
                         step_port=self.step_port)
-
-        # Module-scoped variables (transforms, gravity): TODO(marcus): is this legal
-        self.gravity_vector = tesse_ros_bridge.gravity_vector
-        self.unity_T_enu = tesse_ros_bridge.unity_T_enu
-        self.lh_T_rh = tesse_ros_bridge.lh_T_rh
 
         self.cv_bridge = CvBridge()
 
@@ -97,11 +96,9 @@ class TesseROSWrapper:
 
         # Required states for finite difference calculations.
         self.prev_time = 0.0
-        self.prev_body_rh_vel = [0.0, 0.0, 0.0]
-        self.prev_body_rh_ang_vel = [0.0, 0.0, 0.0]
+        self.prev_vel_brh = [0.0, 0.0, 0.0]
 
         # Setup simulator step mode.
-        # self.env.send(SetFrameRate(self.frame_rate))
 
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
@@ -113,7 +110,17 @@ class TesseROSWrapper:
         # Simulated time requires that we constantly publish to '/clock'.
         self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
 
+        # Setup simulator step mode with teleop.
+        if self.step_mode_enabled:
+            self.env.send(SetFrameRate(self.frame_rate))
+
+        #Setup teleop command.
+        if self.teleop_enabled:
+            rospy.Subscriber("/cmd_vel", Twist, self.cmd_cb)
+
         print "TESSE_ROS_NODE: Initialization complete."
+
+        self.last_cmd = Twist()
 
     def spin(self):
         """ Start timers and callbacks.
@@ -124,6 +131,8 @@ class TesseROSWrapper:
         """
         rospy.Timer(rospy.Duration(1.0/self.frame_rate), self.image_cb)
         self.udp_listener.start()
+
+        # rospy.spin()
 
         while not rospy.is_shutdown():
             self.clock_cb(None)
@@ -142,11 +151,9 @@ class TesseROSWrapper:
         # Parse metadata and process for proper use.
         metadata = tesse_ros_bridge.utils.parse_metadata(data)
         metadata_processed = tesse_ros_bridge.utils.process_metadata(metadata,
-            self.unity_T_enu, self.lh_T_rh, self.prev_time,
-            self.prev_body_rh_vel, self.prev_body_rh_ang_vel)
+            self.prev_time, self.prev_vel_brh)
         self.prev_time = metadata_processed['time']
-        self.prev_body_rh_vel = metadata_processed['velocity']
-        self.prev_body_rh_ang_vel = metadata_processed['ang_vel']
+        self.prev_vel_brh = metadata_processed['velocity']
 
         timestamp = rospy.Time.from_sec(
             metadata_processed['time'] / self.speedup_factor)
@@ -157,7 +164,7 @@ class TesseROSWrapper:
 
         # Publish imu and odometry messages.
         imu = tesse_ros_bridge.utils.metadata_to_imu(metadata_processed,
-            timestamp, self.body_frame_id, self.gravity_vector)
+            timestamp, self.body_frame_id)
         self.imu_pub.publish(imu)
         odom = tesse_ros_bridge.utils.metadata_to_odom(metadata_processed,
             timestamp, self.world_frame_id, self.body_frame_id)
@@ -167,7 +174,7 @@ class TesseROSWrapper:
         self.br.sendTransform(metadata_processed['position'],
                               metadata_processed['quaternion'],
                               timestamp,
-                              self.body_frame_id, self.world_frame_id)
+                              self.body_frame_id, self.world_frame_id)  # TODO: switch?
 
     def image_cb(self, event):
         """ Publish images from simulator to ROS.
@@ -189,15 +196,15 @@ class TesseROSWrapper:
             metadata = tesse_ros_bridge.utils.parse_metadata(
                 data_response.metadata)
             metadata_processed = tesse_ros_bridge.utils.process_metadata(
-                metadata, self.unity_T_enu, self.lh_T_rh, self.prev_time,
-                self.prev_body_rh_vel, self.prev_body_rh_ang_vel)
+                metadata, self.prev_time, self.prev_vel_brh)
             # TODO: reenable in step mode
             # self.prev_time = metadata_processed['time']
-            # self.prev_body_rh_vel = metadata_processed['velocity']
-            # self.prev_body_rh_ang_vel = metadata_processed['ang_vel']
+            # self.prev_vel_brh = metadata_processed['velocity']
 
             timestamp = rospy.Time.from_sec(
                 metadata_processed['time'] / self.speedup_factor)
+
+            # self.clock_pub.publish(timestamp)
 
             # Process each image.
             for i in range(len(self.cameras)):
@@ -230,6 +237,10 @@ class TesseROSWrapper:
             #                       metadata_processed['quaternion'],
             #                       timestamp,
             #                       self.body_frame_id, self.world_frame_id)
+            odom = tesse_ros_bridge.utils.metadata_to_odom(metadata_processed,
+                timestamp, self.world_frame_id, self.body_frame_id)
+            self.odom_pub.publish(odom)
+
         except Exception as error:
                 print "TESSE_ROS_NODE: image_cb error: ", error
 
@@ -244,6 +255,14 @@ class TesseROSWrapper:
                 event: A rospy.Timer event object, which is not used in this
                     method. You may supply `None`.
         """
+        # print "in clock_cb"
+        # force_x = self.last_cmd.linear.x*10
+        # force_y = self.last_cmd.linear.y*10
+        # torque_z = self.last_cmd.angular.z*10
+        # self.env.send(StepWithForce(force_z=force_x, torque_y=torque_z,
+        #     force_x=force_y, duration=1))
+        # print "send command"
+
         try:
             metadata = tesse_ros_bridge.utils.parse_metadata(self.env.request(
                 MetadataRequest()).metadata)
@@ -253,6 +272,27 @@ class TesseROSWrapper:
             self.clock_pub.publish(sim_time)
         except Exception as error:
             print "TESSE_ROS_NODE: clock_cb error: ", error
+
+    def cmd_cb(self, msg):
+        """ Listens to teleop force commands and sends to simulator.
+
+            Subscribed to the key_teleop node's output, the callback gets
+            Twist messages for both linear and angular 'velocities'. These
+            velocities are sent directly as forces and torques to the
+            simulator. Actual values for the incoming velocities are
+            determined in the launch file.
+
+            Args:
+                msg: A geometry_msgs/Twist message.
+        """
+        # force_x = msg.linear.x
+        # force_y = msg.linear.y
+        # torque_z = msg.angular.z
+        # self.env.send(StepWithForce(force_z=force_x, torque_y=torque_z,
+        #     force_x=force_y, duration=0))
+
+        # self.image_cb(None)
+        self.last_cmd = msg
 
     def setup_cameras(self):
         """ Initializes image-related members.

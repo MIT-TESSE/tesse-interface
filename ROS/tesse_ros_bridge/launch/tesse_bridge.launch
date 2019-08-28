@@ -8,6 +8,8 @@
   <arg name="ns" default="tesse"/>
   <arg name="publish_point_clouds"  default="false"/>
   <arg name="visualize"             default="false"/>
+  <arg name="teleop"                default="false"/>
+  <arg name="enable_step_mode"      default="false"/>
 
   <!-- Network arguments -->
   <arg name="client_ip"             default="127.0.0.1"/>
@@ -41,20 +43,23 @@
     <remap from="segmentation" to="segmentation"/>
     <remap from="depth"        to="depth"/>
 
+    <param name="teleop"           value="$(arg teleop)"/>
+    <param name="enable_step_mode" value="$(arg enable_step_mode)"/>
+
     <!-- Network Unity params -->
-    <param name="client_ip"       value="$(arg client_ip)"/>
-    <param name="self_ip"         value="$(arg self_ip)"/>
-    <param name="position_port"   value="9000"/>
-    <param name="metadata_port"   value="9001"/>
-    <param name="image_port"      value="9002"/>
-    <param name="udp_port"        value="9004"/>
-    <param name="step_port"       value="9005"/>
+    <param name="client_ip"        value="$(arg client_ip)"/>
+    <param name="self_ip"          value="$(arg self_ip)"/>
+    <param name="position_port"    value="9000"/>
+    <param name="metadata_port"    value="9001"/>
+    <param name="image_port"       value="9002"/>
+    <param name="udp_port"         value="9004"/>
+    <param name="step_port"        value="9005"/>
 
     <!-- Camera params -->
-    <param name="camera_width"    value="$(arg width)"/>
-    <param name="camera_height"   value="$(arg height)"/>
-    <param name="camera_fov"      value="$(arg fov)"/>
-    <param name="stereo_baseline" value="$(arg stereo_baseline)"/>
+    <param name="camera_width"     value="$(arg width)"/>
+    <param name="camera_height"    value="$(arg height)"/>
+    <param name="camera_fov"       value="$(arg fov)"/>
+    <param name="stereo_baseline"  value="$(arg stereo_baseline)"/>
 
     <!-- Simulator and speed parameters -->
     <param name="speedup_factor" value="$(arg speedup_factor)"/>
@@ -128,5 +133,18 @@
   <group if="$(arg visualize)">
     <node pkg="rviz" type="rviz" name="rviz"
           args="-d $(find tesse_ros_bridge)/rviz/tesse_semantic_without_voxblox.rviz"/>
+  </group>
+
+  <!-- Launch Teleop Node -->
+  <group if="$(arg teleop)">
+    <node pkg="key_teleop" type="key_teleop.py" name="key_teleop" output="screen"
+          launch-prefix="gnome-terminal --">
+      <param name="forward_rate"  value="1.0"/>
+      <param name="backward_rate" value="0.8"/>
+      <param name="rotation_rate" value="1.0"/>
+      <param name="strafe_rate"   value="0.8"/>
+
+      <remap from="key_vel"       to="cmd_vel"/>
+    </node>
   </group>
 </launch>

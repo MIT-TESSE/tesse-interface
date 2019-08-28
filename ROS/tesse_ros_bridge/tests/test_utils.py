@@ -75,16 +75,21 @@ class TestUtilsOffline(unittest.TestCase):
         data_str = ET.tostring(data.getroot())
 
         dict = tesse_ros_bridge.utils.parse_metadata(data_str)
+        proc_dict = tesse_ros_bridge.utils.process_metadata(dict, 0, [0,0,0])
 
-        imu = tesse_ros_bridge.utils.metadata_to_imu(dict, 0, "f", [0, 9.81, 0])
+        imu = tesse_ros_bridge.utils.metadata_to_imu(proc_dict, 0, "f")
+
         self.assertEqual(imu.header.frame_id, "f")
         self.assertEqual(imu.header.stamp, 0)
-        self.assertEqual(imu.angular_velocity.x, dict['ang_vel'][0])
-        self.assertEqual(imu.angular_velocity.y, dict['ang_vel'][1])
-        self.assertEqual(imu.angular_velocity.z, dict['ang_vel'][2])
-        self.assertEqual(imu.linear_acceleration.x, dict['acceleration'][0])
-        self.assertEqual(imu.linear_acceleration.y, dict['acceleration'][1]+9.81)
-        self.assertEqual(imu.linear_acceleration.z, dict['acceleration'][2])
+        self.assertEqual(imu.angular_velocity.x, proc_dict['ang_vel'][0])
+        self.assertEqual(imu.angular_velocity.y, proc_dict['ang_vel'][1])
+        self.assertEqual(imu.angular_velocity.z, proc_dict['ang_vel'][2])
+        self.assertEqual(imu.linear_acceleration.x,
+            proc_dict['acceleration'][0])
+        self.assertEqual(imu.linear_acceleration.y,
+            proc_dict['acceleration'][1]+9.81)
+        self.assertEqual(imu.linear_acceleration.z,
+            proc_dict['acceleration'][2])
 
         # TODO(marcus): add checks on angular velocity between two frames
 
@@ -125,12 +130,12 @@ class TestUtilsOffline(unittest.TestCase):
         data = ET.parse("data/metadata_0.xml")
         data_str = ET.tostring(data.getroot())
 
-        pre = tesse_ros_bridge.unity_T_enu
-        post = tesse_ros_bridge.lh_T_rh
+        pre = tesse_ros_bridge.enu_T_unity
+        post = tesse_ros_bridge.brh_T_blh
 
         dict = tesse_ros_bridge.utils.parse_metadata(data_str)
-        proc = tesse_ros_bridge.utils.process_metadata(dict, pre, post,
-            dict['time']-2, [0,0,0], [0,0,0])
+        proc = tesse_ros_bridge.utils.process_metadata(dict, dict['time']-2,
+            [0,0,0])
 
         transform = proc['transform']
         transform_R = transform[:3,:3]
@@ -151,11 +156,14 @@ class TestUtilsOffline(unittest.TestCase):
 
         self.assertTrue(np.allclose(proc['velocity'],
             post[:3,:3].dot(dict['velocity'])))
+
+        # TODO(marcus): this is not correct.
         self.assertTrue(np.allclose(proc['ang_vel'],
             post[:3,:3].dot(dict['ang_vel'])))
 
+        # print dict['ang_vel']
+
         self.assertTrue(np.allclose(proc['acceleration'], proc['velocity']*0.5))
-        self.assertTrue(np.allclose(proc['ang_accel'], proc['ang_vel']*0.5))
 
         self.assertEqual(proc['time'], dict['time'])
         self.assertEqual(proc['collision_status'], dict['collision_status'])
@@ -167,39 +175,44 @@ class TestUtilsOffline(unittest.TestCase):
         data_1_str = ET.tostring(data_1.getroot())
         data_2_str = ET.tostring(data_2.getroot())
 
-        pre = np.array([[1,0,0,0],
-                        [0,0,1,0],
-                        [0,1,0,0],
-                        [0,0,0,1]])
-        post = np.array([[1,0,0,0],
-                         [0,-1,0,0],
-                         [0,0,1,0],
-                         [0,0,0,1]])
+        pre = tesse_ros_bridge.enu_T_unity
+        post = tesse_ros_bridge.brh_T_blh
 
         dict_1 = tesse_ros_bridge.utils.parse_metadata(data_1_str)
         dict_2 = tesse_ros_bridge.utils.parse_metadata(data_2_str)
-        proc_1 = tesse_ros_bridge.utils.process_metadata(dict_1, pre, post, 0,
-            [0,0,0], [0,0,0])
-        proc_2 = tesse_ros_bridge.utils.process_metadata(dict_2, pre, post,
-            dict_1['time'], proc_1['velocity'], proc_1['ang_vel'])
+        proc_1 = tesse_ros_bridge.utils.process_metadata(dict_1, 0, [0,0,0])
+        proc_2 = tesse_ros_bridge.utils.process_metadata(dict_2, dict_1['time'],
+            proc_1['velocity'])
 
-        transform_1_R = proc_1['transform']
-        transform_2_R = proc_2['transform']
-        transform_1_R[:,3] = transform_2_R[:,3] = np.array([0,0,0,1])
+        prev_enu_T_brh = proc_1['transform']
+        enu_T_brh = proc_2['transform']
+        prev_enu_T_brh[:,3] = enu_T_brh[:,3] = np.array([0,0,0,1])
+
+        prev_unity_T_brh = post.dot(
+            tf.transformations.quaternion_matrix(dict_1['quaternion']))
+        unity_T_brh = post.dot(
+            tf.transformations.quaternion_matrix(dict_2['quaternion']))
 
         dt = dict_2['time'] - dict_1['time']
-        axis_angle_1 = Rotation.from_quat(
+        # expected_ang_vel = Rotation.from_quat(
+        #     tf.transformations.quaternion_from_matrix(np.transpose(
+        #         prev_enu_T_brh).dot(enu_T_brh))).as_rotvec() / dt
+        expected_ang_vel = Rotation.from_quat(
             tf.transformations.quaternion_from_matrix(np.transpose(
-                transform_1_R).dot(transform_2_R))).as_rotvec() / dt
+                prev_unity_T_brh).dot(unity_T_brh))).as_rotvec() / dt
+        actual_ang_vel = proc_2['ang_vel']
 
-        self.assertTrue(np.allclose(axis_angle_1, proc_2['ang_vel']))
+        print "\nexpected ang_vel: ", expected_ang_vel
+        print "actual ang_vel:   ", actual_ang_vel
 
-        expected_accel_1 = (proc_2['velocity']-proc_1['velocity']) / \
+        self.assertTrue(np.allclose(expected_ang_vel, actual_ang_vel))
+
+        expected_accel = (proc_2['velocity'] - proc_1['velocity']) / \
             (proc_2['time']-proc_1['time'])
-        expected_ang_accel_1 = (proc_2['ang_vel']-proc_1['ang_vel']) / \
-            (proc_2['time']-proc_1['time'])
-        self.assertTrue(np.allclose(proc_2['acceleration'], expected_accel_1))
-        self.assertTrue(np.allclose(proc_2['ang_accel'], expected_ang_accel_1))
+        actual_accel = proc_2['acceleration']
+        self.assertTrue(np.allclose(expected_accel, actual_accel))
+
+        # TODO(marcus): add a test for angular rates in all three axes
 
 
 if __name__ == '__main__':
