@@ -91,6 +91,10 @@ class TesseROSWrapper:
         self.imu_pub = rospy.Publisher("imu", Imu, queue_size=1)
         self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=1)
 
+        self.scene_request_service = rospy.Service("scene_change_request",
+                                                    SceneRequestService,
+                                                    self.change_scene)
+
         self.br = tf.TransformBroadcaster()
         self.static_br = tf2_ros.StaticTransformBroadcaster()
 
