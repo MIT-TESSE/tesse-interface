@@ -67,6 +67,18 @@ See (python_demonstration.ipynb)[python_demonstration.ipynb] for example usage o
 
 You can also find Ben's test script at 
 
+### Plotting
+
+You can use rviz for general visualization, we provide a configuration file:
+```bash
+rviz -r ./ROS/tesse_ros_bridge/rviz/tesse_semantic_mesh.rviz
+```
+
+You can also plot IMU and ground-truth odometry from the simulator using `rqt_multiplot` and the config file we provide:
+```bash
+rqt_multiplot --multiplot-config rqt_multiplot/tesse.xml
+```
+
 ### Disclaimer
 
 Distribution authorized to U.S. Government agencies and their contractors. Other requests for this document shall be referred to the MIT Lincoln Laboratory Technology Office.
