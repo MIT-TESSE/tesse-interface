@@ -17,7 +17,7 @@ Use the following commands when having the Unity window in focus:
 ## Setup
 
 To use this interface, clone then setup the `tesse` package.
-```
+```bash
 git clone git@github.mit.edu:TESS/TESSE_interface.git
 cd TESSE_interface/python
 python setup.py develop
@@ -26,7 +26,7 @@ python setup.py develop
 ### Setup for ROS
 To use this interface in ROS, you will need to import the package in the ROS folder into your catkin workspace.
 
-```
+```bash
 # Setup catkin workspace
 mkdir -p ~/catkin_ws/src
 cd ~/catkin_ws/
@@ -59,7 +59,7 @@ source ~/.bashrc
 ## Usage
 
 To run the ROS node:
-```
+```bash
 roslaunch tesse_ros_bridge tesse_ros_bridge.launch
 ```
 
