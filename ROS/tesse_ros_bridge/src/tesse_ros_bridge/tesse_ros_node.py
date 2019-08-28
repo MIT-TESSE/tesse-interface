@@ -19,6 +19,7 @@ from cv_bridge import CvBridge, CvBridgeError
 import tesse_ros_bridge.utils
 
 from tesse_ros_bridge.srv import SceneRequestService
+from tesse_ros_bridge import brh_T_blh
 
 from tesse.msgs import *
 from tesse.env import *
@@ -101,6 +102,7 @@ class TesseROSWrapper:
         # Required states for finite difference calculations.
         self.prev_time = 0.0
         self.prev_vel_brh = [0.0, 0.0, 0.0]
+        self.prev_enu_R_brh = np.identity(3)
 
         # Setup simulator step mode.
 
@@ -156,10 +158,13 @@ class TesseROSWrapper:
         # Parse metadata and process for proper use.
         metadata = tesse_ros_bridge.utils.parse_metadata(data)
         metadata_processed = tesse_ros_bridge.utils.process_metadata(metadata,
-            self.prev_time, self.prev_vel_brh)
+            self.prev_time, self.prev_vel_brh, self.prev_enu_R_brh)
+        # TODO: Move the things below inside maybe (using a class)
+        # TODO: handle initialization of the variables below. Bit tricky now...
         assert(self.prev_time < metadata_processed['time'])
         self.prev_time = metadata_processed['time']
         self.prev_vel_brh = metadata_processed['velocity']
+        self.prev_enu_R_brh = metadata_processed['transform'][:3,:3]
 
         assert(self.speedup_factor)
         timestamp = rospy.Time.from_sec(
@@ -203,10 +208,11 @@ class TesseROSWrapper:
             metadata = tesse_ros_bridge.utils.parse_metadata(
                 data_response.metadata)
             metadata_processed = tesse_ros_bridge.utils.process_metadata(
-                metadata, self.prev_time, self.prev_vel_brh)
+                metadata, self.prev_time, self.prev_vel_brh, self.prev_enu_R_brh)
             # TODO: reenable in step mode
             # self.prev_time = metadata_processed['time']
             # self.prev_vel_brh = metadata_processed['velocity']
+            # self.prev_enu_R_brh = metadata_processed['enu_R_brh']
 
             assert(self.speedup_factor)
             timestamp = rospy.Time.from_sec(

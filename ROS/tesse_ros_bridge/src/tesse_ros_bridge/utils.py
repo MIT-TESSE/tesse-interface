@@ -277,7 +277,7 @@ def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
                          0, 0, 1, 0]
     return camera_info_msg
 
-def process_metadata(metadata, prev_time, prev_vel_brh, prev_ang_vel_brh=None):
+def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh, prev_ang_vel_brh=None):
     """ Convert metadata from the Unity simulator's left-handed frame to the
         a right-handed frame.
 
@@ -316,6 +316,7 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_ang_vel_brh=None):
     unity_T_blh[:,3] = np.array(metadata['position'] + [1])
 
     # TODO(marcus): use enu_T_unity instead of input
+    # Define relevant tfs from unity to enu, and brh (body right handed, we use in VIO).
     enu_T_blh = enu_T_unity.dot(unity_T_blh)
     blh_T_brh = np.transpose(brh_T_blh)
     enu_T_brh = enu_T_blh.dot(blh_T_brh)
@@ -328,6 +329,8 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_ang_vel_brh=None):
     enu_R_brh = enu_R_brh[:3,:3]
 
     # Premultiply velocities to get them in the right-handed frame.
+    # metadata[velocity] is the left-handed body frame velocity.
+    # which we convert to right-handed:
     vel_brh = brh_T_blh[:3,:3].dot(metadata['velocity'])
 
     # ang_vel_brh = brh_T_blh[:3,:3].dot(metadata['ang_vel'])
@@ -346,10 +349,12 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_ang_vel_brh=None):
     ang_vel_brh = unity_T_blh[:3,:3].dot(metadata['ang_vel'])
 
     vel_enu = enu_R_brh.dot(vel_brh)
-    prev_vel_enu = enu_R_brh.dot(prev_vel_brh)
+    prev_vel_enu = prev_enu_R_brh.dot(prev_vel_brh)
 
     # Calculate the body acceleration via finite difference method
     dt = metadata['time'] - prev_time
+    if dt <= 0.0:
+        print("Non-positive timestamp in process_metadata!")
     accel_enu = (vel_enu - prev_vel_enu) / dt
     accel_brh = np.transpose(enu_R_brh).dot(accel_enu)
     # ang_accel_brh = (ang_vel_brh - prev_ang_vel_brh) / dt

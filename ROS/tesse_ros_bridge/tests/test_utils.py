@@ -75,7 +75,7 @@ class TestUtilsOffline(unittest.TestCase):
         data_str = ET.tostring(data.getroot())
 
         dict = tesse_ros_bridge.utils.parse_metadata(data_str)
-        proc_dict = tesse_ros_bridge.utils.process_metadata(dict, 0, [0,0,0])
+        proc_dict = tesse_ros_bridge.utils.process_metadata(dict, 0, [0,0,0], np.identity(3))
 
         imu = tesse_ros_bridge.utils.metadata_to_imu(proc_dict, 0, "f")
 
@@ -87,7 +87,7 @@ class TestUtilsOffline(unittest.TestCase):
         self.assertEqual(imu.linear_acceleration.x,
             proc_dict['acceleration'][0])
         self.assertEqual(imu.linear_acceleration.y,
-            proc_dict['acceleration'][1]+9.81)
+            proc_dict['acceleration'][1] - 9.81)
         self.assertEqual(imu.linear_acceleration.z,
             proc_dict['acceleration'][2])
 
@@ -135,7 +135,7 @@ class TestUtilsOffline(unittest.TestCase):
 
         dict = tesse_ros_bridge.utils.parse_metadata(data_str)
         proc = tesse_ros_bridge.utils.process_metadata(dict, dict['time']-2,
-            [0,0,0])
+            [0,0,0], np.identity(3))
 
         transform = proc['transform']
         transform_R = transform[:3,:3]
@@ -175,22 +175,22 @@ class TestUtilsOffline(unittest.TestCase):
         data_1_str = ET.tostring(data_1.getroot())
         data_2_str = ET.tostring(data_2.getroot())
 
-        pre = tesse_ros_bridge.enu_T_unity
-        post = tesse_ros_bridge.brh_T_blh
+        enu_T_unity= tesse_ros_bridge.enu_T_unity
+        brh_T_blh = tesse_ros_bridge.brh_T_blh
 
         dict_1 = tesse_ros_bridge.utils.parse_metadata(data_1_str)
         dict_2 = tesse_ros_bridge.utils.parse_metadata(data_2_str)
-        proc_1 = tesse_ros_bridge.utils.process_metadata(dict_1, 0, [0,0,0])
+        proc_1 = tesse_ros_bridge.utils.process_metadata(dict_1, 0, [0,0,0], np.identity(3))
         proc_2 = tesse_ros_bridge.utils.process_metadata(dict_2, dict_1['time'],
-            proc_1['velocity'])
+            proc_1['velocity'], np.identity(3))
 
         prev_enu_T_brh = proc_1['transform']
         enu_T_brh = proc_2['transform']
         prev_enu_T_brh[:,3] = enu_T_brh[:,3] = np.array([0,0,0,1])
 
-        prev_unity_T_brh = post.dot(
+        prev_unity_T_brh = brh_T_blh.dot(
             tf.transformations.quaternion_matrix(dict_1['quaternion']))
-        unity_T_brh = post.dot(
+        unity_T_brh = brh_T_blh.dot(
             tf.transformations.quaternion_matrix(dict_2['quaternion']))
 
         dt = dict_2['time'] - dict_1['time']
