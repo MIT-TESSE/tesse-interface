@@ -76,7 +76,7 @@ rviz -r ./ROS/tesse_ros_bridge/rviz/tesse_semantic_mesh.rviz
 
 You can also plot IMU and ground-truth odometry from the simulator using `rqt_multiplot` and the config file we provide:
 ```bash
-rqt_multiplot --multiplot-config rqt_multiplot/tesse.xml
+rqt_multiplot --multiplot-config:=rqt_multiplot/tesse.xml
 ```
 
 ### Disclaimer
