@@ -5,7 +5,7 @@
 -->
 
 <launch>
-  <arg name="ns" default="tesse"/>
+  <arg name="ns"                    default="tesse"/>
   <arg name="publish_point_clouds"  default="false"/>
   <arg name="visualize"             default="false"/>
   <arg name="teleop"                default="false"/>
@@ -16,6 +16,7 @@
   <arg name="self_ip"               default="127.0.0.1"/>
 
   <!-- Camera arguments -->
+  <!-- Parse these using calibration.yaml, and calculate fov inside code! -->
   <arg name="fov"                   default="37.84929"/>
   <arg name="width"                 default="720"/>
   <arg name="height"                default="480"/>
@@ -30,6 +31,8 @@
   <!-- Frame arguments -->
   <arg name="world_frame_id"        default="world"/>
   <arg name="body_frame_id"         default="base_link_gt"/>
+  <arg name="left_cam_frame_id"     default="left_cam"/>
+  <arg name="right_cam_frame_id"    default="right_cam"/>
 
 
   <!-- If use_sim, simulator will publish clock modified by speedup_factor -->
@@ -62,13 +65,15 @@
     <param name="stereo_baseline"  value="$(arg stereo_baseline)"/>
 
     <!-- Simulator and speed parameters -->
-    <param name="speedup_factor" value="$(arg speedup_factor)"/>
-    <param name="frame_rate" value="$(arg frame_rate)"/>
-    <param name="imu_rate" value="$(arg imu_rate)"/>
+    <param name="speedup_factor"    value="$(arg speedup_factor)"/>
+    <param name="frame_rate"        value="$(arg frame_rate)"/>
+    <param name="imu_rate"          value="$(arg imu_rate)"/>
 
     <!-- Frame parameters -->
-    <param name="world_frame_id" value="$(arg world_frame_id)"/>
-    <param name="body_frame_id" value="$(arg body_frame_id)"/>
+    <param name="world_frame_id"     value="$(arg world_frame_id)"/>
+    <param name="body_frame_id"      value="$(arg body_frame_id)"/>
+    <param name="left_cam_frame_id"  value="$(arg left_cam_frame_id)"/>
+    <param name="right_cam_frame_id" value="$(arg right_cam_frame_id)"/>
   </node>
 
   <group if="$(arg publish_point_clouds)">
@@ -112,22 +117,19 @@
       <param name="queue_size" value="10"/>
     </node>
 
-
      <!-- Run stereo_dense_reconstruction_node -->
     <node ns="stereo_gray" name="stereo_image_proc" pkg="stereo_image_proc"
           type="stereo_image_proc" clear_params="true" output="screen">
       <remap from="left/image_rect_color" to="/dev/null/left_cam"/>
       <remap from="right/image_rect_color" to="/dev/null/right_cam"/>
 
-      <remap from="left/image_raw" to="/$(arg ns)/left_cam" />
-      <remap from="left/camera_info" to="/$(arg ns)/left_cam/camera_info" />
-      <remap from="right/image_raw" to="/$(arg ns)/right_cam" />
-      <remap from="right/camera_info" to="/$(arg ns)/right_cam/camera_info" />
+      <remap from="left/image_raw"                to="/$(arg ns)/left_cam"/>
+      <remap from="left/camera_info"              to="/$(arg ns)/left_cam/camera_info"/>
+      <remap from="right/image_raw"               to="/$(arg ns)/right_cam"/>
+      <remap from="right/camera_info"             to="/$(arg ns)/right_cam/camera_info"/>
 
       <param name="approximate_sync" value="true" />
-
     </node>
-
   </group>
 
   <group if="$(arg visualize)">

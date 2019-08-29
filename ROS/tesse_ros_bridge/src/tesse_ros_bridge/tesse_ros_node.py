@@ -12,7 +12,7 @@ from std_msgs.msg import Header
 from sensor_msgs.msg import Image, Imu, CameraInfo
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose, PoseStamped, Point, \
-     PointStamped, TransformStamped, Twist
+     PointStamped, TransformStamped, Twist, Quaternion
 from rosgraph_msgs.msg import Clock
 from cv_bridge import CvBridge, CvBridgeError
 
@@ -33,29 +33,32 @@ class TesseROSWrapper:
         self.step_mode_enabled = rospy.get_param("~enable_step_mode", False)
 
         # Networking parameters:
-        self.client_ip = rospy.get_param("~client_ip", "127.0.0.1")
-        self.self_ip = rospy.get_param("~self_ip", "127.0.0.1")
+        self.client_ip     = rospy.get_param("~client_ip", "127.0.0.1")
+        self.self_ip       = rospy.get_param("~self_ip", "127.0.0.1")
         self.position_port = rospy.get_param("~position_port", 9000)
         self.metadata_port = rospy.get_param("~metadata_port", 9001)
-        self.image_port = rospy.get_param("~image_port", 9002)
-        self.udp_port = rospy.get_param("~udp_port", 9004)
-        self.step_port = rospy.get_param("~step_port", 9005)
+        self.image_port    = rospy.get_param("~image_port", 9002)
+        self.udp_port      = rospy.get_param("~udp_port", 9004)
+        self.step_port     = rospy.get_param("~step_port", 9005)
 
         # Camera parameters:
-        self.camera_width = rospy.get_param("~camera_width", 720)
-        self.camera_height = rospy.get_param("~camera_height", 480)
-        self.camera_fov = rospy.get_param("~camera_fov", 60)
+        self.camera_width    = rospy.get_param("~camera_width", 720)
+        self.camera_height   = rospy.get_param("~camera_height", 480)
+        self.camera_fov      = rospy.get_param("~camera_fov", 60)
         self.stereo_baseline = rospy.get_param("~stereo_baseline", 0.2)
 
         # Simulator speed parameters:
-        self.use_sim = rospy.get_param("/use_sim_time", False)
-        self.speedup_factor = rospy.get_param("~speedup_factor", 1)
-        self.frame_rate = rospy.get_param("~frame_rate", 20.0)
-        self.imu_rate = rospy.get_param("~imu_rate", 200.0)
+        self.use_sim        = rospy.get_param("/use_sim_time", False)
+        self.speedup_factor = rospy.get_param("~speedup_factor", 1.0)
+        assert(self.speedup_factor > 0.0)  # We are  dividing by this so > 0
+        self.frame_rate     = rospy.get_param("~frame_rate", 20.0) 
+        self.imu_rate       = rospy.get_param("~imu_rate", 200.0)
 
         # Output parameters:
-        self.world_frame_id = rospy.get_param("~world_frame_id", "world")
-        self.body_frame_id = rospy.get_param("~body_frame_id", "base_link_gt")
+        self.world_frame_id     = rospy.get_param("~world_frame_id", "world")
+        self.body_frame_id      = rospy.get_param("~body_frame_id", "base_link_gt")
+        self.left_cam_frame_id  = rospy.get_param("~left_cam_frame_id", "left_cam")
+        self.right_cam_frame_id = rospy.get_param("~right_cam_frame_id", "right_cam")
 
         self.env = Env(simulation_ip=self.client_ip,
                        own_ip=self.self_ip,
@@ -64,21 +67,20 @@ class TesseROSWrapper:
                        image_port=self.image_port,
                        step_port=self.step_port)
 
+        # To send images via ROS network and convert from/to ROS
         self.cv_bridge = CvBridge()
 
-        # TODO we also need to know frame_id, hardcoding for now, again
-        # use a more descriptive data structure.
-        self.cam_frame_id = ["left_cam", "right_cam", "left_cam", "left_cam"]
-        self.cameras=[(Camera.RGB_LEFT, Compression.OFF, Channels.SINGLE),
-                      (Camera.RGB_RIGHT, Compression.OFF, Channels.SINGLE),
-                      (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
-                      (Camera.DEPTH, Compression.OFF, Channels.THREE)]
+        self.cameras=[(Camera.RGB_LEFT,     Compression.OFF, Channels.SINGLE, self.left_cam_frame_id),
+                      (Camera.RGB_RIGHT,    Compression.OFF, Channels.SINGLE, self.right_cam_frame_id),
+                      (Camera.SEGMENTATION, Compression.OFF, Channels.THREE,  self.left_cam_frame_id),
+                      (Camera.DEPTH,        Compression.OFF, Channels.THREE,  self.left_cam_frame_id)]
 
         self.img_pubs = [rospy.Publisher("left_cam", Image, queue_size=1),
                          rospy.Publisher("right_cam", Image, queue_size=1),
                          rospy.Publisher("segmentation", Image, queue_size=1),
                          rospy.Publisher("depth", Image, queue_size=1)]
 
+        # TODO(Marcus): document what is this?
         self.far_draw_dist = None
 
         # Camera information members.
@@ -89,9 +91,10 @@ class TesseROSWrapper:
         self.cam_info_msg_left = None
         self.cam_info_msg_right = None
 
-        self.imu_pub = rospy.Publisher("imu", Imu, queue_size=1)
-        self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=1)
-        self.gt_pub = rospy.Publisher("gt", TransformStamped, queue_size=1)
+        # Setup ROS publishers
+        self.imu_pub  = rospy.Publisher("imu", Imu, queue_size=10)
+        self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=10)
+        self.gt_pub   = rospy.Publisher("gt", TransformStamped, queue_size=10)
 
         # Setup ROS services.
         self.setup_ros_services()
@@ -101,8 +104,8 @@ class TesseROSWrapper:
         self.static_br = tf2_ros.StaticTransformBroadcaster()
 
         # Required states for finite difference calculations.
-        self.prev_time = 0.0
-        self.prev_vel_brh = [0.0, 0.0, 0.0]
+        self.prev_time      = 0.0
+        self.prev_vel_brh   = [0.0, 0.0, 0.0]
         self.prev_enu_R_brh = np.identity(3)
 
         # Setup camera parameters and extrinsics in the simulator per spec.
@@ -110,21 +113,20 @@ class TesseROSWrapper:
 
         # Setup UdpListener.
         self.udp_listener = UdpListener(port=self.udp_port, rate=self.imu_rate)
-        self.udp_listener.subscribe('udp_subcriber', self.udp_cb) # TODO fix typo subscriber
-
+        self.udp_listener.subscribe('udp_subscriber', self.udp_cb)
 
         # Simulated time requires that we constantly publish to '/clock'.
-        self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=1)
+        self.clock_pub = rospy.Publisher("/clock", Clock, queue_size=10)
 
         # Setup simulator step mode with teleop.
         if self.step_mode_enabled:
             self.env.send(SetFrameRate(self.frame_rate))
 
-        #Setup teleop command.
+        # Setup teleop command.
         if self.teleop_enabled:
             rospy.Subscriber("/cmd_vel", Twist, self.cmd_cb)
 
-        print "TESSE_ROS_NODE: Initialization complete."
+        print("TESSE_ROS_NODE: Initialization complete.")
 
         self.last_cmd = Twist()
 
@@ -135,7 +137,7 @@ class TesseROSWrapper:
             cannot simply call `rospy.spin()` as this will wait for messages
             to go to /clock first, and will freeze the node.
         """
-        rospy.Timer(rospy.Duration(1.0/self.frame_rate), self.image_cb)
+        rospy.Timer(rospy.Duration(1.0 / self.frame_rate), self.image_cb)
         self.udp_listener.start()
 
         # rospy.spin()
@@ -160,11 +162,10 @@ class TesseROSWrapper:
             self.prev_time, self.prev_vel_brh, self.prev_enu_R_brh)
 
         assert(self.prev_time < metadata_processed['time'])
-        self.prev_time = metadata_processed['time']
-        self.prev_vel_brh = metadata_processed['velocity']
+        self.prev_time      = metadata_processed['time']
+        self.prev_vel_brh   = metadata_processed['velocity']
         self.prev_enu_R_brh = metadata_processed['transform'][:3,:3]
 
-        assert(self.speedup_factor > 0.0)
         timestamp = rospy.Time.from_sec(
             metadata_processed['time'] / self.speedup_factor)
 
@@ -199,11 +200,10 @@ class TesseROSWrapper:
             # Get camera data.
             data_response = self.env.request(DataRequest(True, self.cameras))
 
-            # Process metadata to publish transaform.
+            # Process metadata to publish transform.
             metadata = tesse_ros_bridge.utils.parse_metadata(
                 data_response.metadata)
 
-            assert(self.speedup_factor > 0.0)
             timestamp = rospy.Time.from_sec(
                 metadata['time'] / self.speedup_factor)
 
@@ -224,7 +224,7 @@ class TesseROSWrapper:
                         data_response.images[i], 'rgb8')
 
                 # Publish images to appropriate topic.
-                img_msg.header.frame_id = self.cam_frame_id[i]
+                img_msg.header.frame_id = self.cameras[i][3]
                 img_msg.header.stamp = timestamp
                 self.img_pubs[i].publish(img_msg)
 
@@ -256,7 +256,6 @@ class TesseROSWrapper:
             metadata = tesse_ros_bridge.utils.parse_metadata(self.env.request(
                 MetadataRequest()).metadata)
 
-            assert(self.speedup_factor > 0.0)
             sim_time = rospy.Time.from_sec(
                 metadata['time'] / self.speedup_factor)
             self.clock_pub.publish(sim_time)
@@ -295,37 +294,47 @@ class TesseROSWrapper:
             to be published with every frame.
         """
         # Set camera parameters once for the entire simulation.
-        for camera in self.cameras:
-            resp = None
-            while resp is None:
-                print "TESSE_ROS_NODE: Setting parameters of camera: ", \
-                        camera[0], "..."
-                resp = self.env.request(SetCameraParametersRequest(
-                                                self.camera_height,
-                                                self.camera_width,
-                                                self.camera_fov,
-                                                camera[0]))
+        # Set all cameras to have same intrinsics:
+        resp = None
+        while resp is None:
+            print "TESSE_ROS_NODE: Setting intrinsic parameters for cameras."
+            resp = self.env.request(SetCameraParametersRequest(
+                self.camera_height,
+                self.camera_width,
+                self.camera_fov,
+                Camera.ALL))
+            print resp
 
         # TODO(marcus): add SetCameraOrientationRequest option.
-        cam_left_position = Point(-self.stereo_baseline / 2, 0.0, 0.0)
-        cam_right_position = Point(self.stereo_baseline / 2, 0.0, 0.0)
+        # TODO(Toni): this is hardcoded!! what if don't want IMU in the middle?
+        # Also how is this set using x? what if it is y, z?
+        left_cam_position  = Point(x = -self.stereo_baseline / 2,
+                                   y = 0.0,
+                                   z = 0.0)
+        right_cam_position = Point(x = self.stereo_baseline / 2,
+                                   y = 0.0,
+                                   z = 0.0)
+        cameras_orientation = Quaternion(x=0.0,
+                                         y=0.0,
+                                         z=0.0,
+                                         w=1.0)
 
         resp = None
         while resp is None:
             print "TESSE_ROS_NODE: Setting position of left camera..."
             resp = self.env.request(SetCameraPositionRequest(
-                    cam_left_position.x,
-                    cam_left_position.y,
-                    cam_left_position.z,
+                    left_cam_position.x,
+                    left_cam_position.y,
+                    left_cam_position.z,
                     Camera.RGB_LEFT))
 
         resp = None
         while resp is None:
             print "TESSE_ROS_NODE: Setting position of right camera..."
             resp = self.env.request(SetCameraPositionRequest(
-                    cam_right_position.x,
-                    cam_right_position.y,
-                    cam_right_position.z,
+                    right_cam_position.x,
+                    right_cam_position.y,
+                    right_cam_position.z,
                     Camera.RGB_RIGHT))
 
         # Set position depth and segmentation cameras to align with left:
@@ -333,18 +342,28 @@ class TesseROSWrapper:
         while resp is None:
             print "TESSE_ROS_NODE: Setting position of depth camera..."
             resp = self.env.request(SetCameraPositionRequest(
-                    cam_left_position.x,
-                    cam_left_position.y,
-                    cam_left_position.z,
+                    left_cam_position.x,
+                    left_cam_position.y,
+                    left_cam_position.z,
                     Camera.DEPTH))
         resp = None
         while resp is None:
             print "TESSE_ROS_NODE: Setting position of segmentation camera..."
             resp = self.env.request(SetCameraPositionRequest(
-                    cam_left_position.x,
-                    cam_left_position.y,
-                    cam_left_position.z,
+                    left_cam_position.x,
+                    left_cam_position.y,
+                    left_cam_position.z,
                     Camera.SEGMENTATION))
+
+        resp = None
+        while resp is None:
+            print("TESSE_ROS_NODE: Setting orientation of all cameras to identity.")
+            resp = self.env.request(SetCameraOrientationRequest(
+                    cameras_orientation.x,
+                    cameras_orientation.y,
+                    cameras_orientation.z,
+                    cameras_orientation.w,
+                    Camera.ALL))
 
         # Depth camera multiplier factor.
         depth_cam_data = None
@@ -356,38 +375,53 @@ class TesseROSWrapper:
         self.far_draw_dist = parsed_depth_cam_data['draw_distance']['far']
 
         # Left cam static tf.
-        static_tf_cam_left = TransformStamped()
-        static_tf_cam_left.header.frame_id = self.body_frame_id
-        static_tf_cam_left.transform.translation = cam_left_position
-        static_tf_cam_left.transform.rotation.x = 0
-        static_tf_cam_left.transform.rotation.y = 0
-        static_tf_cam_left.transform.rotation.z = 0
-        static_tf_cam_left.transform.rotation.w = 1.0
-        static_tf_cam_left.child_frame_id = self.cam_frame_id[0]
+        static_tf_cam_left                       = TransformStamped()
+        static_tf_cam_left.header.frame_id       = self.body_frame_id
+        static_tf_cam_left.transform.translation = left_cam_position
+        static_tf_cam_left.transform.rotation    = cameras_orientation
+        static_tf_cam_left.child_frame_id        = self.left_cam_frame_id
 
         # Right cam static tf.
-        static_tf_cam_right = copy.deepcopy(static_tf_cam_left)
-        static_tf_cam_right.transform.translation = cam_right_position
-        static_tf_cam_right.child_frame_id = self.cam_frame_id[1]
+        static_tf_cam_right                       = TransformStamped()
+        static_tf_cam_right.header.frame_id       = self.body_frame_id
+        static_tf_cam_right.transform.translation = right_cam_position
+        static_tf_cam_right.transform.rotation    = cameras_orientation
+        static_tf_cam_right.child_frame_id        = self.right_cam_frame_id
 
+        # Send static tfs over the ROS network
         self.static_br.sendTransform(static_tf_cam_left)
         self.static_br.sendTransform(static_tf_cam_right)
 
         # Camera_info publishing for VIO.
         left_cam_data = None
-        right_cam_data = None
-        while left_cam_data is None and right_cam_data is None:
-            print "TESSE_ROS_NODE: Acquiring camera data..."
+        while left_cam_data is None:
+            print("TESSE_ROS_NODE: Acquiring left camera data...")
             left_cam_data = tesse_ros_bridge.utils.parse_cam_data(
                 self.env.request(
                     CameraInformationRequest(Camera.RGB_LEFT)).metadata)
+            assert(left_cam_data['id'] == 0)
+            # TODO(Toni): reenable when issue #37 is solved.
+            # assert(left_cam_data['parameters']['height'] > 0)
+            # assert(left_cam_data['parameters']['width'] > 0)
+
+        right_cam_data = None
+        while right_cam_data is None:
+            print("TESSE_ROS_NODE: Acquiring right camera data...")
             right_cam_data = tesse_ros_bridge.utils.parse_cam_data(
                 self.env.request(
                     CameraInformationRequest(Camera.RGB_RIGHT)).metadata)
+            assert(right_cam_data['id'] == 1)
+            # TODO(Toni): reenable when issue #37 is solved.
+            # assert(left_cam_data['parameters']['height'] > 0)
+            # assert(left_cam_data['parameters']['width'] > 0)
 
         self.cam_info_msg_left, self.cam_info_msg_right = \
             tesse_ros_bridge.utils.generate_camera_info(
                 left_cam_data, right_cam_data)
+
+        # TODO(Toni): do a check here by requesting all camera info and checking that it is 
+        # as the one requested!
+
 
     def setup_ros_services(self):
         """ Setup ROS services related to the simulator.

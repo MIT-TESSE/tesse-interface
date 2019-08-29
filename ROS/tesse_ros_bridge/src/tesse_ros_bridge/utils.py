@@ -200,45 +200,83 @@ def generate_camera_info(left_cam_data, right_cam_data):
             right camera's CameraInfo message, in that order.
     """
     # Parameters must be the same for left and right cameras:
-    width = left_cam_data['parameters']['width']
-    height = left_cam_data['parameters']['height']
-    fov_vertical = left_cam_data['parameters']['fov']
+    width_left        = left_cam_data['parameters']['width']
+    height_left       = left_cam_data['parameters']['height']
+    fov_vertical_left = left_cam_data['parameters']['fov']
 
-    width_right = right_cam_data['parameters']['width']
-    height_right = right_cam_data['parameters']['height']
+    width_right        = right_cam_data['parameters']['width']
+    height_right       = right_cam_data['parameters']['height']
     fov_vertical_right = right_cam_data['parameters']['fov']
 
-    assert(width == width_right)
-    assert(height == height_right)
-    assert(fov_vertical == fov_vertical_right)
+    assert(width_left == width_right)
+    assert(height_left == height_right)
+    assert(fov_vertical_left == fov_vertical_right)
 
     # Required for Unity FOV scaling:
-    fov_horizontal = np.rad2deg(2 * np.arctan(np.tan(np.deg2rad(fov_vertical) / 2) * width / height))
-    fx = (width / 2.0) / np.tan(np.deg2rad(fov_horizontal) / 2.0)
-    fy = (height / 2.0) / np.tan(np.deg2rad(fov_vertical) / 2.0)
+    # TODO(Toni): uncomment these! Once issue #37 is solved.
+    # assert(height_left > 0)
+    # assert(width_left > 0)
 
-    cx = width // 2 # pixels
-    cy = height // 2 # pixels
+    # TODO(Toni): do unit tests for these conversions!!
+    # ACCORDING TO UNITY (and this is the param we are actually changing)
+    # """ The field of view of the camera in degrees.
+    # This is the vertical field of view; horizontal Field of view varies depending on the viewport's aspect ratio.
+    # """ Unity docs:  https://docs.unity3d.com/ScriptReference/Camera-fieldOfView.html
+    # Also: according to Unity, the fov starts at 60:
+    # //Start the Camera field of view at 60
+    #  m_FieldOfView = 60.0f;
+    # And they provide an OnGUI function to change that with a slider it seems.
+    # TODO(Toni): Unity modifies horizontal accordingly! CHECK THAT THE FORMULAS MATCH!!
+    # If we do not guess Unity's fov_horizontal correctly it will definitely break the VIO
+    fov_horizontal_left = np.rad2deg(2 * np.arctan(np.tan(np.deg2rad(fov_vertical_left) / 2) * width_left / height_left))
+    fx = (width_left  / 2.0) / np.tan(np.deg2rad(fov_horizontal_left) / 2.0)
+    fy = (height_left / 2.0) / np.tan(np.deg2rad(fov_vertical_left)   / 2.0)
+
+    print("FX:", fx)
+    print("FY:", fy)
+
+    # We only want to work with square pixels
+    assert(fx == fy)
+
+    # ** // is doing Floor division **: Divides and returns the integer value of the quotient.
+    #  It dumps the digits after the decimal.
+    cx = width_left  / 2  # pixels
+    cy = height_left / 2 # pixels
+    assert(cx == width_left  // 2)
+    assert(cy == height_left // 2)
+    # TODO(Toni): not necessarily! This is hardcoded!!
     baseline = np.abs(left_cam_data['position'][0] - right_cam_data['position'][0])
     # assert(baseline == self.stereo_baseline)  # TODO(marcus): put somewhere
+    # TODO(Toni): unit-test that!
     Tx = 0
     Ty = 0
     Tx_right = -fx * baseline
 
     cam_info_msg_left = make_camera_info_msg("left_cam",
-                                             width,
-                                             height,
+                                             width_left,
+                                             height_left,
                                              fx, fy, cx, cy, Tx, Ty)
     cam_info_msg_right = make_camera_info_msg("right_cam",
-                                             width,
-                                             height,
+                                             width_left,
+                                             height_left,
                                              fx, fy, cx, cy, Tx_right, Ty)
 
     return (cam_info_msg_left, cam_info_msg_right)
 
 
+# TODO(Toni): unit-test this!
 def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
     """ Create a CameraInfo ROS message from parameters.
+        Following convention in: 
+            http://docs.ros.org/melodic/api/sensor_msgs/html/msg/CameraInfo.html
+
+        Header header    # Header timestamp should be acquisition time of image
+                        # Header frame_id should be optical frame of camera
+                        # origin of frame should be optical center of camera
+                        # +x should point to the right in the image
+                        # +y should point down in the image
+                        # +z should point into the plane of the image
+
 
         Args:
             frame_id: A string representing the reference frame of the
@@ -256,10 +294,10 @@ def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
             A Ros CameraInfo message instance.
 
     """
-    camera_info_msg = CameraInfo()
+    camera_info_msg                 = CameraInfo()
     camera_info_msg.header.frame_id = frame_id
-    camera_info_msg.width = width
-    camera_info_msg.height = height
+    camera_info_msg.width           = width
+    camera_info_msg.height          = height
     camera_info_msg.K = [fx, 0, cx,
                          0, fy, cy,
                          0, 0, 1]
