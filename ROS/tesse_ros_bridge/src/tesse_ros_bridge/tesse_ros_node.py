@@ -55,14 +55,14 @@ class TesseROSWrapper:
 
         # Output parameters:
         self.world_frame_id = rospy.get_param("~world_frame_id", "world")
-        self.body_frame_id = rospy.get_param("~body_frame_id", "base_link")
+        self.body_frame_id = rospy.get_param("~body_frame_id", "base_link_gt")
 
         self.env = Env(simulation_ip=self.client_ip,
-                        own_ip=self.self_ip,
-                        position_port=self.position_port,
-                        metadata_port=self.metadata_port,
-                        image_port=self.image_port,
-                        step_port=self.step_port)
+                       own_ip=self.self_ip,
+                       position_port=self.position_port,
+                       metadata_port=self.metadata_port,
+                       image_port=self.image_port,
+                       step_port=self.step_port)
 
         self.cv_bridge = CvBridge()
 
@@ -91,11 +91,12 @@ class TesseROSWrapper:
 
         self.imu_pub = rospy.Publisher("imu", Imu, queue_size=1)
         self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=1)
+        self.gt_pub = rospy.Publisher("gt", TransformStamped, queue_size=1)
 
-        self.scene_request_service = rospy.Service("scene_change_request",
-                                                    SceneRequestService,
-                                                    self.change_scene)
+        # Setup ROS services.
+        self.setup_ros_services()
 
+        # Transform broadcasters.
         self.br = tf.TransformBroadcaster()
         self.static_br = tf2_ros.StaticTransformBroadcaster()
 
@@ -103,8 +104,6 @@ class TesseROSWrapper:
         self.prev_time = 0.0
         self.prev_vel_brh = [0.0, 0.0, 0.0]
         self.prev_enu_R_brh = np.identity(3)
-
-        # Setup simulator step mode.
 
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
@@ -159,14 +158,13 @@ class TesseROSWrapper:
         metadata = tesse_ros_bridge.utils.parse_metadata(data)
         metadata_processed = tesse_ros_bridge.utils.process_metadata(metadata,
             self.prev_time, self.prev_vel_brh, self.prev_enu_R_brh)
-        # TODO: Move the things below inside maybe (using a class)
-        # TODO: handle initialization of the variables below. Bit tricky now...
+
         assert(self.prev_time < metadata_processed['time'])
         self.prev_time = metadata_processed['time']
         self.prev_vel_brh = metadata_processed['velocity']
         self.prev_enu_R_brh = metadata_processed['transform'][:3,:3]
 
-        assert(self.speedup_factor)
+        assert(self.speedup_factor > 0.0)
         timestamp = rospy.Time.from_sec(
             metadata_processed['time'] / self.speedup_factor)
 
@@ -183,10 +181,7 @@ class TesseROSWrapper:
         self.odom_pub.publish(odom)
 
         # Publish agent ground truth transform.
-        self.br.sendTransform(metadata_processed['position'],
-                              metadata_processed['quaternion'],
-                              timestamp,
-                              self.body_frame_id, self.world_frame_id)  # TODO: switch?
+        self.publish_tf(metadata_processed['transform'], timestamp)
 
     def image_cb(self, event):
         """ Publish images from simulator to ROS.
@@ -207,16 +202,10 @@ class TesseROSWrapper:
             # Process metadata to publish transaform.
             metadata = tesse_ros_bridge.utils.parse_metadata(
                 data_response.metadata)
-            metadata_processed = tesse_ros_bridge.utils.process_metadata(
-                metadata, self.prev_time, self.prev_vel_brh, self.prev_enu_R_brh)
-            # TODO: reenable in step mode
-            # self.prev_time = metadata_processed['time']
-            # self.prev_vel_brh = metadata_processed['velocity']
-            # self.prev_enu_R_brh = metadata_processed['enu_R_brh']
 
-            assert(self.speedup_factor)
+            assert(self.speedup_factor > 0.0)
             timestamp = rospy.Time.from_sec(
-                metadata_processed['time'] / self.speedup_factor)
+                metadata['time'] / self.speedup_factor)
 
             # self.clock_pub.publish(timestamp)
 
@@ -245,15 +234,9 @@ class TesseROSWrapper:
             self.cam_info_left_pub.publish(self.cam_info_msg_left)
             self.cam_info_right_pub.publish(self.cam_info_msg_right)
 
-            # TODO(marcus): re-enable in step mode
-            # Publish current transform.
-            # self.br.sendTransform(metadata_processed['position'],
-            #                       metadata_processed['quaternion'],
-            #                       timestamp,
-            #                       self.body_frame_id, self.world_frame_id)
-            odom = tesse_ros_bridge.utils.metadata_to_odom(metadata_processed,
-                timestamp, self.world_frame_id, self.body_frame_id)
-            self.odom_pub.publish(odom)
+            self.publish_tf(
+                tesse_ros_bridge.utils.convert_coordinate_frame(metadata),
+                    timestamp)
 
         except Exception as error:
                 print "TESSE_ROS_NODE: image_cb error: ", error
@@ -269,18 +252,11 @@ class TesseROSWrapper:
                 event: A rospy.Timer event object, which is not used in this
                     method. You may supply `None`.
         """
-        # print "in clock_cb"
-        # force_x = self.last_cmd.linear.x*10
-        # force_y = self.last_cmd.linear.y*10
-        # torque_z = self.last_cmd.angular.z*10
-        # self.env.send(StepWithForce(force_z=force_x, torque_y=torque_z,
-        #     force_x=force_y, duration=1))
-        # print "send command"
-
         try:
             metadata = tesse_ros_bridge.utils.parse_metadata(self.env.request(
                 MetadataRequest()).metadata)
 
+            assert(self.speedup_factor > 0.0)
             sim_time = rospy.Time.from_sec(
                 metadata['time'] / self.speedup_factor)
             self.clock_pub.publish(sim_time)
@@ -413,6 +389,16 @@ class TesseROSWrapper:
             tesse_ros_bridge.utils.generate_camera_info(
                 left_cam_data, right_cam_data)
 
+    def setup_ros_services(self):
+        """ Setup ROS services related to the simulator.
+
+            These services include:
+                scene_change_request: change the scene_id of the simulator
+        """
+        self.scene_request_service = rospy.Service("scene_change_request",
+                                                    SceneRequestService,
+                                                    self.change_scene)
+
     def change_scene(self, req):
         """ Change scene ID of simulator as a ROS service. """
         # TODO(marcus): make this more elegant, like a None chek
@@ -421,6 +407,37 @@ class TesseROSWrapper:
             return True
         except:
             return False
+
+    def publish_tf(self, cur_tf, timestamp):
+        """ Publish the ground-truth transform to the TF tree and to
+            a separate ground truth topic as a TransformStamped.
+
+            Args:
+                cur_tf: A 4x4 numpy matrix containing the transformation from
+                    the body frame of the agent to ENU.
+                timestamp: A rospy.Time instance representing the current
+                    time in the simulator.
+        """
+        # Publish current transform to tf tree.
+        trans = tesse_ros_bridge.utils.get_translation_part(cur_tf)
+        quat = tesse_ros_bridge.utils.get_quaternion(cur_tf)
+        self.br.sendTransform(trans, quat, timestamp, self.body_frame_id,
+                              self.world_frame_id)
+
+        # Publish current transform to gt topic.
+        transform_stamped = TransformStamped()
+        transform_stamped.header.stamp = timestamp
+        transform_stamped.header.frame_id = self.body_frame_id
+        transform_stamped.child_frame_id = self.world_frame_id
+        transform_stamped.transform.translation.x = trans[0]
+        transform_stamped.transform.translation.y = trans[1]
+        transform_stamped.transform.translation.z = trans[2]
+        transform_stamped.transform.rotation.x = quat[0]
+        transform_stamped.transform.rotation.y = quat[1]
+        transform_stamped.transform.rotation.z = quat[2]
+        transform_stamped.transform.rotation.w = quat[3]
+
+        self.gt_pub.publish(transform_stamped)
 
 
 if __name__ == '__main__':

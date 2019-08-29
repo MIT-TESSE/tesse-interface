@@ -29,7 +29,7 @@
 
   <!-- Frame arguments -->
   <arg name="world_frame_id"        default="world"/>
-  <arg name="body_frame_id"         default="base_link"/>
+  <arg name="body_frame_id"         default="base_link_gt"/>
 
 
   <!-- If use_sim, simulator will publish clock modified by speedup_factor -->

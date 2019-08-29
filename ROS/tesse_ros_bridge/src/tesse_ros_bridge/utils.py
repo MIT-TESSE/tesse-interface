@@ -8,7 +8,7 @@ from sensor_msgs.msg import CameraInfo, Imu
 from nav_msgs.msg import Odometry
 import tf.transformations
 
-from tesse_ros_bridge import enu_T_unity, brh_T_blh, gravity_enu
+from tesse_ros_bridge import enu_T_unity, brh_T_blh, blh_T_brh, gravity_enu
 
 def parse_metadata(data):
     """ Parse Unity agent metadata into a useful dictionary.
@@ -277,8 +277,8 @@ def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
                          0, 0, 1, 0]
     return camera_info_msg
 
-def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh, prev_ang_vel_brh=None):
-    """ Convert metadata from the Unity simulator's left-handed frame to the
+def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh):
+    """ Convert metadata from the Unity simulator's left-handed frame to
         a right-handed frame.
 
         Position and quaternion are converted first to ENU and then to
@@ -290,7 +290,7 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh, prev_ang
         are calculated via finite-difference of respective velocities, also
         in the right-handed body frame.
 
-        Args;
+        Args:
             metadata: A dictionary containing metadata from the Unity
                 simulator.
             prev_time: A float representing the time of the last metadata
@@ -311,53 +311,19 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh, prev_ang
             Additionally, the 4x4 numpy matrix transform between the Unity
             world frame and the ENU right-handed frame is included.
     """
-    # Build a 4x4 transformation matrix from the Unity metadata.
-    unity_T_blh = tf.transformations.quaternion_matrix(metadata['quaternion'])
-    unity_T_blh[:,3] = np.array(metadata['position'] + [1]) # Homogeneous coordinates
-
-    # TODO(marcus): use enu_T_unity instead of input
-    # Define relevant tfs from unity to enu, and brh (body right handed, we use in VIO).
-    enu_T_blh = enu_T_unity.dot(unity_T_blh)
-    blh_T_brh = np.transpose(brh_T_blh) # TODO put all static guys in init
-    enu_T_brh = enu_T_blh.dot(blh_T_brh)
+    enu_T_brh = convert_coordinate_frame(metadata)
 
     # Calculate position and orientation in the right-hand body frame from enu.
-    enu_t_brh = enu_T_brh[:3,3]
-    enu_R_brh = copy.deepcopy(enu_T_brh)
-    enu_R_brh[:,3] = np.array([0,0,0,1])
-    enu_q_brh = tf.transformations.quaternion_from_matrix(enu_R_brh)
-    enu_R_brh = enu_R_brh[:3,:3]
+    enu_t_brh = get_translation_part(enu_T_brh)
+    enu_R_brh = get_rotation_mat(enu_T_brh)
+    enu_q_brh = get_quaternion(enu_T_brh)
 
-    # Premultiply velocities to get them in the right-handed frame.
-    # metadata[velocity] is the left-handed body frame velocity.
-    # which we convert to right-handed:
-    vel_brh = brh_T_blh[:3,:3].dot(metadata['velocity'])
+    vel_brh = get_vel_brh(metadata)
+    ang_vel_brh = get_ang_vel_brh(metadata)
 
-    # ang_vel_brh = brh_T_blh[:3,:3].dot(metadata['ang_vel'])
-    # ang_vel_brh = np.transpose(enu_R_brh).dot(
-    #     enu_T_unity[:3,:3].dot(metadata['ang_vel']))
-    # ang_vel_brh = blh_T_brh[:3,:3].dot(
-    #     np.transpose(unity_T_blh[:3,:3]).dot(metadata['ang_vel']))
-    # ang_vel_brh = brh_T_blh[:3,:3].dot(
-    #     np.transpose(unity_T_blh[:3,:3])).dot(metadata['ang_vel'])
-
-    # TODO(marcus): we took out the blh_T_brh so that we could get the sign
-    # to match with the expected from test_utils.py. This is not a perfect
-    # solution.
-    # TODO(marcus): check the negative performance
-    # TODO(marcus): use gt method with the axis-angle of the R's to get it.
-    ang_vel_brh = unity_T_blh[:3,:3].dot(metadata['ang_vel'])
-
-    vel_enu = enu_R_brh.dot(vel_brh)
-    prev_vel_enu = prev_enu_R_brh.dot(prev_vel_brh)
-
-    # Calculate the body acceleration via finite difference method
     dt = metadata['time'] - prev_time
-    if dt <= 0.0:
-        print("Non-positive timestamp in process_metadata!")
-    accel_enu = (vel_enu - prev_vel_enu) / dt
-    accel_brh = np.transpose(enu_R_brh).dot(accel_enu)
-    # ang_accel_brh = (ang_vel_brh - prev_ang_vel_brh) / dt
+    acc_brh = get_acc_brh(enu_R_brh, vel_brh, prev_vel_brh, prev_enu_R_brh, dt)
+    # ang_acc_brh = get_ang_acc_brh()
 
     # Construct dictionary of transformed metadata.
     processed_dict = {}
@@ -365,10 +331,147 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh, prev_ang
     processed_dict['quaternion'] = enu_q_brh
     processed_dict['velocity'] = vel_brh
     processed_dict['ang_vel'] = ang_vel_brh
-    processed_dict['acceleration'] = accel_brh
-    # processed_dict['ang_accel'] = ang_accel_brh
+    processed_dict['acceleration'] = acc_brh
+    # processed_dict['ang_accel'] = ang_acc_brh
     processed_dict['time'] = metadata['time']
     processed_dict['collision_status'] = metadata['collision_status']
     processed_dict['transform'] = enu_T_brh
 
     return processed_dict
+
+def convert_coordinate_frame(metadata):
+    """ Convert position and quaternion from the Unity simulator's left-handed
+        frame to a right-handed frame.
+
+        Position and quaternion are converted first to ENU and then to
+        the right handed frame. These remain in a global reference frame,
+        but one which ROS can better handle.
+
+        Args:
+            metadata: A dictionary containing metadata from the Unity
+                simulator.
+
+        Returns:
+            A 4x4 numpy array representing the homogeneous transformation
+            from the ENU world frame to the right-handed body frame of the
+            agent, based on the input metadata.
+    """
+    # Build a 4x4 transformation matrix from the Unity metadata.
+    unity_T_blh = tf.transformations.quaternion_matrix(metadata['quaternion'])
+    unity_T_blh[:,3] = np.array(metadata['position'] + [1]) # Homogeneous coords
+
+    # Convert the left-handed Unity frame to the right-handed ENU frame.
+    enu_T_blh = enu_T_unity.dot(unity_T_blh)
+    enu_T_brh = enu_T_blh.dot(blh_T_brh)
+
+    return enu_T_brh
+
+def get_vel_brh(metadata):
+    """ Get velocity in the body right-handed frame from raw metadata.
+
+        Metadata comes in as left-handed body-frame data, so we premultiply
+        by the transformation from left-handed to right-handed frames.
+
+        Args:
+            metadata: A dictionary containing metadata from the Unity
+                simulator.
+
+        Returns:
+            A 1x3 numpy array containing linear velocity of the agent
+            in the body-right-handed frame as [vx,vy,vz].
+    """
+    return brh_T_blh[:3,:3].dot(metadata['velocity'])
+
+def get_ang_vel_brh(metadata):
+    """ Get angular velocity in the body right-handed frame from raw metadata.
+
+        Metadata comes in as left-handed body-frame data, so we premultiply
+        by the transformation from left-handed to right-handed frames.
+
+        Args:
+            metadata: A dictionary containing metadata from the Unity
+                simulator.
+
+        Returns:
+            A 1x3 numpy array containing angular velocity of the agent
+            in the body-right-handed frame as [wx,wy,wz].
+    """
+    # TODO(marcus): simulator must change to give ang_vel in body coords
+    return brh_T_blh[:3,:3].dot(metadata['ang_vel'])
+    # OTW, use this:
+    # return unity_T_blh[:3,:3].dot(metadata['ang_vel'])
+
+def get_acc_brh(enu_R_brh, vel_brh, prev_vel_brh, prev_enu_R_brh, dt):
+    """ Get linear acceleration in the body right-handed frame via a finite
+        difference of velocities.
+
+        Velocities in the ENU frame are used for the finite difference as
+        the global coordinates will ensure no error from the relative
+        difference between body frames at two timestamps.
+
+        Args:
+            enu_R_brh: A 4x4 numpy matrix containing the homogeneous transform
+                from body-right-handed to ENU at the current time.
+            vel_brh: A 1x3 numpy array containing linear velocity in the
+                body-right-handed frame at the current time.
+            prev_vel_brh: A 1x3 numpy array containing linear velocity in the
+                body-right-handed frame at the previous time.
+            prev_enu_R_brh: A 4x4 numpy matrix containing the homogeneous
+                transform from body-right-handed to ENU at the previous time.
+            dt: A floating-point number representing the elapsed time from
+                the previous time to the current one.
+
+        Returns:
+            A 1x3 numpy array containing the linear accelerations of the agent
+            in [ax,ay,az] format.
+    """
+    assert(dt >= 0.0)
+
+    vel_enu = enu_R_brh.dot(vel_brh)
+    prev_vel_enu = prev_enu_R_brh.dot(prev_vel_brh)
+
+    # Calculate the body acceleration via finite difference method
+    accel_enu = (vel_enu - prev_vel_enu) / dt
+    return np.transpose(enu_R_brh).dot(accel_enu)
+
+def get_ang_acc_brh():
+    # ang_acc_brh = (ang_vel_brh - prev_ang_vel_brh) / dt
+    pass
+
+def get_translation_part(transform):
+    """ Get the 3-vector representing translation from a transformation matrix.
+
+        Args:
+            transform: A 4x4 numpy array representing a transformation.
+
+        Returns:
+            A 1x3 numpy array containin the translation part of the transform,
+            in the [x,y,z] order.
+    """
+    return transform[:3,3]
+
+def get_rotation_mat(transform):
+    """ Get the 4x4 rotation matrix associated with a transformation matrix.
+
+        Args:
+            transform: A 4x4 numpy array representing a transformation.
+
+        Returns:
+            A 3x3 numpy array containin the rotation matrix of the transform.
+    """
+    R = copy.deepcopy(transform)
+    return R[:3,:3]
+
+def get_quaternion(transform):
+    """ Get the 1x4 quaternion vector associated with a transformation matrix.
+
+        Args:
+            transform: A 4x4 numpy array representing a transformation.
+
+        Returns:
+            A 1x4 numpy array containin the quaternion representation of the
+            rotation part of the transformation matrix.
+    """
+    R = copy.deepcopy(transform)
+    R[:,3] = np.array([0,0,0,1])
+    return tf.transformations.quaternion_from_matrix(R)
