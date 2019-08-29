@@ -111,7 +111,7 @@ class TesseROSWrapper:
 
         # Setup UdpListener.
         self.udp_listener = UdpListener(port=self.udp_port, rate=self.imu_rate)
-        self.udp_listener.subscribe('udp_subcriber', self.udp_cb)
+        self.udp_listener.subscribe('udp_subcriber', self.udp_cb) # TODO fix typo subscriber
 
 
         # Simulated time requires that we constantly publish to '/clock'.
