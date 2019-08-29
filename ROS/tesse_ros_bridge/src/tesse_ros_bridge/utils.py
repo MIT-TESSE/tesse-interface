@@ -313,12 +313,12 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh, prev_ang
     """
     # Build a 4x4 transformation matrix from the Unity metadata.
     unity_T_blh = tf.transformations.quaternion_matrix(metadata['quaternion'])
-    unity_T_blh[:,3] = np.array(metadata['position'] + [1])
+    unity_T_blh[:,3] = np.array(metadata['position'] + [1]) # Homogeneous coordinates
 
     # TODO(marcus): use enu_T_unity instead of input
     # Define relevant tfs from unity to enu, and brh (body right handed, we use in VIO).
     enu_T_blh = enu_T_unity.dot(unity_T_blh)
-    blh_T_brh = np.transpose(brh_T_blh)
+    blh_T_brh = np.transpose(brh_T_blh) # TODO put all static guys in init
     enu_T_brh = enu_T_blh.dot(blh_T_brh)
 
     # Calculate position and orientation in the right-hand body frame from enu.
