@@ -214,6 +214,57 @@ class TestUtilsOffline(unittest.TestCase):
 
         # TODO(marcus): add a test for angular rates in all three axes
 
+    def test_acceleration_from_metadata(self):
+        data_1 = ET.parse("data/metadata_3.xml")
+        data_2 = ET.parse("data/metadata_4.xml")
+        data_3 = ET.parse("data/metadata_5.xml")
+        data_4 = ET.parse("data/metadata_6.xml")
+        data_1_str = ET.tostring(data_1.getroot())
+        data_2_str = ET.tostring(data_2.getroot())
+        data_3_str = ET.tostring(data_3.getroot())
+        data_4_str = ET.tostring(data_4.getroot())
+
+        enu_T_unity= tesse_ros_bridge.enu_T_unity
+        brh_T_blh = tesse_ros_bridge.brh_T_blh
+
+        dict_1 = tesse_ros_bridge.utils.parse_metadata(data_1_str)
+        dict_2 = tesse_ros_bridge.utils.parse_metadata(data_2_str)
+        dict_3 = tesse_ros_bridge.utils.parse_metadata(data_3_str)
+        dict_4 = tesse_ros_bridge.utils.parse_metadata(data_4_str)
+
+        proc_1 = tesse_ros_bridge.utils.process_metadata(dict_1, 0, [0,0,0], np.identity(3))
+        proc_2 = tesse_ros_bridge.utils.process_metadata(dict_2, dict_1['time'], proc_1['velocity'], proc_1['transform'][:3,:3])
+        proc_3 = tesse_ros_bridge.utils.process_metadata(dict_3, dict_2['time'], proc_2['velocity'], proc_2['transform'][:3,:3])
+        proc_4 = tesse_ros_bridge.utils.process_metadata(dict_4, dict_3['time'], proc_3['velocity'], proc_3['transform'][:3,:3])
+
+        np.set_printoptions(precision=8)
+
+        assert(proc_1['time'] == dict_1['time'])
+        assert(proc_2['time'] == dict_2['time'])
+        assert(proc_3['time'] == dict_3['time'])
+        assert(proc_4['time'] == dict_4['time'])
+
+        assert(np.allclose(proc_2['time'], dict_1['time'] + 0.005))
+        assert(np.allclose(proc_3['time'], dict_2['time'] + 0.005))
+        assert(np.allclose(proc_4['time'], dict_3['time'] + 0.005))
+
+        # Double differentiation to get acceleration
+        dt_12 = proc_2['time'] - proc_1['time']
+        dt_23 = proc_3['time'] - proc_2['time']
+
+        expected_vel_2 = (proc_2['position'] - proc_1['position']) / dt_12
+        expected_vel_3 = (proc_3['position'] - proc_2['position']) / dt_23
+
+        print("Position proc: ", proc_2['position'])
+        print("Position dict: ", dict_2['position'])
+
+        expected_acc_3 = (expected_vel_3 - expected_vel_2) / dt_23
+        actual_acc_3 = proc_3['acceleration']
+
+        # We have calculated accel in world frame, now convert to body frame.
+        expected_acc_3_brh = np.transpose(proc_3['transform'][:3,:3]).dot(expected_acc_3)
+
+        self.assertTrue(np.allclose(expected_acc_3_brh, actual_acc_3, atol=1.e-1))
 
 if __name__ == '__main__':
     unittest.main()
