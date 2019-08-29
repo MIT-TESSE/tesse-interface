@@ -19,7 +19,7 @@
   <arg name="fov"                   default="37.84929"/>
   <arg name="width"                 default="720"/>
   <arg name="height"                default="480"/>
-  <arg name="stereo_baseline"       default="0.1"/>
+  <arg name="stereo_baseline"       default="0.10"/>
 
   <!-- Sim arguments -->
   <arg name="use_sim_time"          default="true"/>
