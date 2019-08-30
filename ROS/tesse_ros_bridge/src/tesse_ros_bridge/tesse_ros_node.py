@@ -302,17 +302,18 @@ class TesseROSWrapper:
         # Set camera parameters once for the entire simulation.
         # Set all cameras to have same intrinsics:
         for camera in self.cameras:
-            resp = None
-            while resp is None:
-                camera_id = camera[0]
-                print("TESSE_ROS_NODE: Setting intrinsic parameters for camera: ",
-                    camera_id)
-                resp = self.env.request(SetCameraParametersRequest(
-                    self.camera_height,
-                    self.camera_width,
-                    self.camera_fov,
-                    camera_id))
-                print resp
+            camera_id = camera[0]
+            if camera_id is not Camera.THIRD_PERSON:
+                resp = None
+                while resp is None:
+                    print("TESSE_ROS_NODE: Setting intrinsic parameters for camera: ",
+                        camera_id)
+                    resp = self.env.request(SetCameraParametersRequest(
+                        self.camera_height,
+                        self.camera_width,
+                        self.camera_fov,
+                        camera_id))
+                    print resp
 
         # TODO(marcus): add SetCameraOrientationRequest option.
         # TODO(Toni): this is hardcoded!! what if don't want IMU in the middle?
