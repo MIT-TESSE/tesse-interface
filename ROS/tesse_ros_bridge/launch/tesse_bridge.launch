@@ -17,6 +17,7 @@
 
   <!-- Camera arguments -->
   <!-- Parse these using calibration.yaml, and calculate fov inside code! -->
+  <!-- Don't ask for FOV, ask for focal_length (f) -->
   <arg name="fov"                   default="37.84929"/>
   <arg name="width"                 default="720"/>
   <arg name="height"                default="480"/>
@@ -33,7 +34,6 @@
   <arg name="body_frame_id"         default="base_link_gt"/>
   <arg name="left_cam_frame_id"     default="left_cam"/>
   <arg name="right_cam_frame_id"    default="right_cam"/>
-
 
   <!-- If use_sim, simulator will publish clock modified by speedup_factor -->
   <param name="use_sim_time" value="$(arg use_sim_time)"/>

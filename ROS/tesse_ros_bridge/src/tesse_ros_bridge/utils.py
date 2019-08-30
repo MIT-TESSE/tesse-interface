@@ -200,9 +200,9 @@ def generate_camera_info(left_cam_data, right_cam_data):
             right camera's CameraInfo message, in that order.
     """
     # Parameters must be the same for left and right cameras:
-    width_left        = left_cam_data['parameters']['width']
-    height_left       = left_cam_data['parameters']['height']
-    fov_vertical_left = left_cam_data['parameters']['fov']
+    width_left         = left_cam_data['parameters']['width']
+    height_left        = left_cam_data['parameters']['height']
+    fov_vertical_left  = left_cam_data['parameters']['fov']
 
     width_right        = right_cam_data['parameters']['width']
     height_right       = right_cam_data['parameters']['height']
@@ -213,9 +213,8 @@ def generate_camera_info(left_cam_data, right_cam_data):
     assert(fov_vertical_left == fov_vertical_right)
 
     # Required for Unity FOV scaling:
-    # TODO(Toni): uncomment these! Once issue #37 is solved.
-    # assert(height_left > 0)
-    # assert(width_left > 0)
+    assert(height_left > 0)
+    assert(width_left > 0)
 
     # TODO(Toni): do unit tests for these conversions!!
     # ACCORDING TO UNITY (and this is the param we are actually changing)
@@ -228,7 +227,7 @@ def generate_camera_info(left_cam_data, right_cam_data):
     # And they provide an OnGUI function to change that with a slider it seems.
     # TODO(Toni): Unity modifies horizontal accordingly! CHECK THAT THE FORMULAS MATCH!!
     # If we do not guess Unity's fov_horizontal correctly it will definitely break the VIO
-    fov_horizontal_left = np.rad2deg(2 * np.arctan(np.tan(np.deg2rad(fov_vertical_left) / 2) * width_left / height_left))
+    fov_horizontal_left = np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(fov_vertical_left) / 2.0) * width_left / height_left))
     fx = (width_left  / 2.0) / np.tan(np.deg2rad(fov_horizontal_left) / 2.0)
     fy = (height_left / 2.0) / np.tan(np.deg2rad(fov_vertical_left)   / 2.0)
 
@@ -244,8 +243,15 @@ def generate_camera_info(left_cam_data, right_cam_data):
     cy = height_left / 2 # pixels
     assert(cx == width_left  // 2)
     assert(cy == height_left // 2)
+
+    print("CX:", cx)
+    print("CY:", cy)
+
     # TODO(Toni): not necessarily! This is hardcoded!!
     baseline = np.abs(left_cam_data['position'][0] - right_cam_data['position'][0])
+
+    print("Baseline: ", baseline)
+
     # assert(baseline == self.stereo_baseline)  # TODO(marcus): put somewhere
     # TODO(Toni): unit-test that!
     Tx = 0
