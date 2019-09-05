@@ -48,6 +48,7 @@ class Interface(Enum):
     POSITION = 0
     METADATA = 1
     IMAGE = 2
+    STEP = 3
 
 
 class AbstractMessage:
@@ -83,11 +84,11 @@ class Transform(PositionMessage):
         super(Transform, self).__init__(('f', translate_x), ('f', translate_z), ('f', rotate_y))
 
 
-class AddRelativeForceAndTorque(PositionMessage):
-    __tag__ = 'xBFF'
+class AddForce(PositionMessage):
+    __tag__ = 'xBff'
 
-    def __init__(self, force_z=0, torque_y=0):
-        super(AddRelativeForceAndTorque, self).__init__(('f', force_z), ('f', torque_y))
+    def __init__(self, force_z=0, torque_y=0, force_x=0):
+        super(AddForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x))
 
 
 class Reposition(PositionMessage):
@@ -105,8 +106,22 @@ class Reposition(PositionMessage):
         )
 
 
+class SetHoverHeight(PositionMessage):
+    __tag__ = 'xSHh'
+
+    def __init__(self, height=2.5):
+        super(SetHoverHeight, self).__init__(('f', height))
+
+
 class Respawn(PositionMessage):
     __tag__ = 'RSPN'
+
+
+class SetFrameRate(PositionMessage):
+    __tag__ = 'fScR'
+
+    def __init__(self, frame_rate=0):
+        super(SetFrameRate, self).__init__(('I', frame_rate))
 
 
 class SceneRequest(PositionMessage):
@@ -236,3 +251,24 @@ class DataResponse(object):
     def _decode_metadata(self, metadata=None):
         # self.metadata = bytes(metadata).decode('utf-8')  # python 3
         self.metadata = metadata.tobytes().decode('utf-8')  # python 2/3
+
+
+# STEP INTERFACE
+
+class StepMessage(AbstractMessage):
+    __interface__ = Interface.STEP
+
+    def __init__(self, *message_contents):
+        super(StepMessage, self).__init__(*message_contents)
+
+class StepWithForce(StepMessage):
+    __tag__ = 'fBff'
+
+    def __init__(self, force_z=0, torque_y=0, force_x=0, duration=0):
+        super(StepWithForce, self).__init__(('f', force_z), ('f', torque_y), ('f', force_x), ('f', duration))
+
+class StepWithTransform(StepMessage):
+    __tag__ = 'tlpt'
+
+    def __init__(self, translate_x=0, translate_z=0, rotate_y=0):
+        super(StepWithTransform, self).__init__(('f', translate_x), ('f', translate_z), ('f', rotate_y))
