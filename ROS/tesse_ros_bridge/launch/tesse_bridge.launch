@@ -3,7 +3,6 @@
      cloud reconstructions optionally.
      RVIZ is used for visualization.
 -->
-
 <launch>
   <arg name="ns"                    default="tesse"/>
   <arg name="publish_point_clouds"  default="false"/>
@@ -18,7 +17,7 @@
   <!-- Camera arguments -->
   <!-- Parse these using calibration.yaml, and calculate fov inside code! -->
   <!-- Don't ask for FOV, ask for focal_length (f) -->
-  <arg name="fov"                   default="37.84929"/>
+  <arg name="fov"                   default="60"/>
   <arg name="width"                 default="720"/>
   <arg name="height"                default="480"/>
   <arg name="stereo_baseline"       default="0.10"/>
@@ -59,9 +58,9 @@
     <param name="step_port"        value="9005"/>
 
     <!-- Camera params -->
+    <param name="camera_fov"       value="$(arg fov)"/>
     <param name="camera_width"     value="$(arg width)"/>
     <param name="camera_height"    value="$(arg height)"/>
-    <param name="camera_fov"       value="$(arg fov)"/>
     <param name="stereo_baseline"  value="$(arg stereo_baseline)"/>
 
     <!-- Simulator and speed parameters -->

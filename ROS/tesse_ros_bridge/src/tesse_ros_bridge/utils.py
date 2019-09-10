@@ -248,7 +248,15 @@ def generate_camera_info(left_cam_data, right_cam_data):
     print("CY:", cy)
 
     # TODO(Toni): not necessarily! This is hardcoded!!
-    baseline = np.abs(left_cam_data['position'][0] - right_cam_data['position'][0])
+    # baseline = np.abs(left_cam_data['position'][0] - right_cam_data['position'][0])
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    # TODO(Toni): REMOVE AFTER SOLVING ISSUE #37 in TESSE
+    baseline = 0.05
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
 
     print("Baseline: ", baseline)
 
@@ -312,7 +320,7 @@ def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
                          0, 1, 0,
                          0, 0, 1]
     # No distortion
-    camera_info_msg.distortion_model = "plumb_bob"
+    camera_info_msg.distortion_model = "radial-tangential"
     camera_info_msg.D = [0, 0, 0, 0]
 
     # Ty = 0 and Tx = -fx' * B, where B is the baseline between the cameras.
@@ -469,12 +477,11 @@ def get_acc_brh(enu_R_brh, vel_brh, prev_vel_brh, prev_enu_R_brh, dt):
             A 1x3 numpy array containing the linear accelerations of the agent
             in [ax,ay,az] format.
     """
-    assert(dt >= 0.0)
-
     vel_enu = enu_R_brh.dot(vel_brh)
     prev_vel_enu = prev_enu_R_brh.dot(prev_vel_brh)
 
     # Calculate the body acceleration via finite difference method
+    assert(dt > 0.0)
     accel_enu = (vel_enu - prev_vel_enu) / dt
     return np.transpose(enu_R_brh).dot(accel_enu)
 

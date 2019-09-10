@@ -106,13 +106,19 @@ class TesseROSWrapper:
 
         # Transform broadcasters.
         self.tf_broadcaster = tf.TransformBroadcaster()
-        self.static_tf_broadcaster_left_cam = tf2_ros.StaticTransformBroadcaster()
-        self.static_tf_broadcaster_right_cam = tf2_ros.StaticTransformBroadcaster()
+        # Don't call static_tf_broadcaster.sendTransform multiple times.
+        # Rather call it once with multiple static tfs! Check issue #40
+        self.static_tf_broadcaster = tf2_ros.StaticTransformBroadcaster()
 
         # Required states for finite difference calculations.
         self.prev_time      = 0.0
         self.prev_vel_brh   = [0.0, 0.0, 0.0]
         self.prev_enu_R_brh = np.identity(3)
+
+        # Setup collision
+        self.enable_collision = rospy.get_param("~enable_collision", False)
+        # is not working...
+        # self.setup_collision(self.enable_collision)
 
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
@@ -365,24 +371,18 @@ class TesseROSWrapper:
                     left_cam_position.z,
                     Camera.SEGMENTATION))
 
-        resp = None
-        while resp is None:
-            print "TESSE_ROS_NODE: Setting position of third-person camera..."
-            resp = self.env.request(SetCameraPositionRequest(
-                    left_cam_position.x,
-                    left_cam_position.y,
-                    left_cam_position.z,
-                    Camera.THIRD_PERSON))
-
-        resp = None
-        while resp is None:
-            print("TESSE_ROS_NODE: Setting orientation of all cameras to identity...")
-            resp = self.env.request(SetCameraOrientationRequest(
-                    cameras_orientation.x,
-                    cameras_orientation.y,
-                    cameras_orientation.z,
-                    cameras_orientation.w,
-                    Camera.ALL))
+        for camera in self.cameras:
+            camera_id = camera[0]
+            if camera_id is not Camera.THIRD_PERSON:
+                resp = None
+                while resp is None:
+                    print("TESSE_ROS_NODE: Setting orientation of all cameras to identity...")
+                    resp = self.env.request(SetCameraOrientationRequest(
+                            cameras_orientation.x,
+                            cameras_orientation.y,
+                            cameras_orientation.z,
+                            cameras_orientation.w,
+                            camera_id))
 
         # Depth camera multiplier factor.
         depth_cam_data = None
@@ -411,8 +411,7 @@ class TesseROSWrapper:
         static_tf_cam_right.child_frame_id        = self.right_cam_frame_id
 
         # Send static tfs over the ROS network
-        self.static_tf_broadcaster_left_cam.sendTransform(static_tf_cam_left)
-        self.static_tf_broadcaster_right_cam.sendTransform(static_tf_cam_right)
+        self.static_tf_broadcaster.sendTransform([static_tf_cam_right, static_tf_cam_left])
 
         # Camera_info publishing for VIO.
         left_cam_data = None
@@ -452,7 +451,13 @@ class TesseROSWrapper:
 
         # TODO(Toni): do a check here by requesting all camera info and checking that it is 
         # as the one requested!
+        # Ok so let's check that the 
 
+    def setup_collision(self, enable):
+        resp = None
+        while resp is None:
+            print "TESSE_ROS_NODE: Setting collision to: ", enable
+            resp = self.env.request(ColliderRequest(enable))
 
     def setup_ros_services(self):
         """ Setup ROS services related to the simulator.
