@@ -27,7 +27,7 @@
   <arg name="speedup_factor"        default="1"/>
   <arg name="frame_rate"            default="20.0"/>
   <arg name="imu_rate"              default="200"/>
-  <arg name="enable_collision"      default="true"/>
+  <arg name="enable_collision"      default="false"/>
 
   <!-- Frame arguments -->
   <arg name="world_frame_id"        default="world"/>

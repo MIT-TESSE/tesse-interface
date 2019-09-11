@@ -115,12 +115,12 @@ class TesseROSWrapper:
         self.prev_vel_brh   = [0.0, 0.0, 0.0]
         self.prev_enu_R_brh = np.identity(3)
 
-        # Setup collision
-        self.enable_collision = rospy.get_param("~enable_collision", 0)
-        self.env.send(ColliderRequest(enable=self.enable_collision))
-
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
+
+        # Setup collision
+        enable_collision = rospy.get_param("~enable_collision", 0)
+        self.setup_collision(enable_collision)
 
         # Setup UdpListener.
         self.udp_listener = UdpListener(port=self.udp_port, rate=self.imu_rate)
@@ -455,6 +455,14 @@ class TesseROSWrapper:
                                                     SceneRequestService,
                                                     self.change_scene)
 
+    def setup_collision(self, enable_collision):
+        """ Enable/Disable collisions in Simulator. """
+        print("TESSE_ROS_NODE: Setup collisions to:", enable_collision)
+        if enable_collision is True:
+            self.env.send(ColliderRequest(enable=1))
+        else:
+            self.env.send(ColliderRequest(enable=0))
+        
     def change_scene(self, req):
         """ Change scene ID of simulator as a ROS service. """
         # TODO(marcus): make this more elegant, like a None chek
