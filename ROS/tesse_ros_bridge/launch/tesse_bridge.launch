@@ -20,7 +20,7 @@
   <arg name="vertical_fov"          default="60"/>
   <arg name="width"                 default="720"/>
   <arg name="height"                default="480"/>
-  <arg name="stereo_baseline"       default="0.10"/>
+  <arg name="stereo_baseline"       default="0.40"/>
 
   <!-- Sim arguments -->
   <arg name="use_sim_time"          default="true"/>
@@ -70,6 +70,7 @@
     <param name="frame_rate"        value="$(arg frame_rate)"/>
     <param name="imu_rate"          value="$(arg imu_rate)"/>
     <param name="enable_collision"  value="$(arg enable_collision)"/>
+    <param name="initial_scene"     value="$(arg initial_scene)"/>
 
     <!-- Frame parameters -->
     <param name="world_frame_id"     value="$(arg world_frame_id)"/>

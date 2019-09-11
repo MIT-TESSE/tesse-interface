@@ -300,6 +300,8 @@ def generate_camera_info(left_cam_data, right_cam_data):
 
     print("FX:", fx)
     print("FY:", fy)
+    print("Width:", width_left)
+    print("Height:", height_left)
 
     # We only want to work with square pixels
     assert(fx == fy)
