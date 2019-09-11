@@ -27,7 +27,8 @@
   <arg name="speedup_factor"        default="1"/>
   <arg name="frame_rate"            default="20.0"/>
   <arg name="imu_rate"              default="200"/>
-  <arg name="enable_collision"      default="true"/>
+  <arg name="enable_collision"      default="false"/>
+  <arg name="initial_scene"          default="2"/> <!-- 2: bright office scene -->
 
   <!-- Frame arguments -->
   <arg name="world_frame_id"        default="world"/>
@@ -69,6 +70,7 @@
     <param name="frame_rate"        value="$(arg frame_rate)"/>
     <param name="imu_rate"          value="$(arg imu_rate)"/>
     <param name="enable_collision"  value="$(arg enable_collision)"/>
+    <param name="initial_scene"     value="$(arg initial_scene)"/>
 
     <!-- Frame parameters -->
     <param name="world_frame_id"     value="$(arg world_frame_id)"/>

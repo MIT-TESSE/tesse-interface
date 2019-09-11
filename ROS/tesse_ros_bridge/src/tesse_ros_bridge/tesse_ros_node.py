@@ -115,9 +115,16 @@ class TesseROSWrapper:
         self.prev_vel_brh   = [0.0, 0.0, 0.0]
         self.prev_enu_R_brh = np.identity(3)
 
+        # Change scene
+        initial_scene = rospy.get_param("~initial_scene", 1)
+        self.change_scene(initial_scene)
+
         # Setup collision
-        self.enable_collision = rospy.get_param("~enable_collision", 0)
-        self.env.send(ColliderRequest(enable=self.enable_collision))
+        self.enable_collision = rospy.get_param("~enable_collision", False)
+        if self.enable_collision == True:
+            self.env.send(ColliderRequest(enable=1))
+        else:
+            self.env.send(ColliderRequest(enable=0))
 
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
@@ -136,6 +143,7 @@ class TesseROSWrapper:
         # Setup teleop command.
         if self.teleop_enabled:
             rospy.Subscriber("/cmd_vel", Twist, self.cmd_cb)
+
 
         print("TESSE_ROS_NODE: Initialization complete.")
 
@@ -459,16 +467,20 @@ class TesseROSWrapper:
         """
         self.scene_request_service = rospy.Service("scene_change_request",
                                                     SceneRequestService,
-                                                    self.change_scene)
+                                                    self.rosservice_change_scene)
 
-    def change_scene(self, req):
+    def rosservice_change_scene(self, req):
         """ Change scene ID of simulator as a ROS service. """
         # TODO(marcus): make this more elegant, like a None chek
         try:
-            result = self.env.request(SceneRequest(req.id))
+            change_scene(scene_id)
             return True
         except:
             return False
+
+    def change_scene(self, scene_id):
+        """ Change scene ID of simulator. """
+        return self.env.request(SceneRequest(scene_id))
 
     def publish_tf(self, cur_tf, timestamp):
         """ Publish the ground-truth transform to the TF tree and to
