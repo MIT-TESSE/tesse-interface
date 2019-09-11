@@ -518,7 +518,8 @@ def get_ang_vel_brh(metadata):
             in the body-right-handed frame as [wx,wy,wz].
     """
     # TODO(marcus): simulator must change to give ang_vel in body coords
-    return brh_T_blh[:3,:3].dot(metadata['ang_vel'])
+    #return brh_T_blh[:3,:3].dot(metadata['ang_vel'])
+    return metadata['ang_vel']
     # OTW, use this:
     # return unity_T_blh[:3,:3].dot(metadata['ang_vel'])
 
