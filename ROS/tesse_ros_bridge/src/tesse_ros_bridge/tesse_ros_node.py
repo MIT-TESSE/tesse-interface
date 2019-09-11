@@ -427,9 +427,8 @@ class TesseROSWrapper:
                 self.env.request(
                     CameraInformationRequest(Camera.RGB_LEFT)).metadata)
             assert(left_cam_data['id'] == 0)
-            # TODO(Toni): reenable when issue #37 is solved.
-            # assert(left_cam_data['parameters']['height'] > 0)
-            # assert(left_cam_data['parameters']['width'] > 0)
+            assert(left_cam_data['parameters']['height'] > 0)
+            assert(left_cam_data['parameters']['width'] > 0)
 
         right_cam_data = None
         while right_cam_data is None:
@@ -438,19 +437,9 @@ class TesseROSWrapper:
                 self.env.request(
                     CameraInformationRequest(Camera.RGB_RIGHT)).metadata)
             assert(right_cam_data['id'] == 1)
-            # TODO(Toni): reenable when issue #37 is solved.
-            # assert(left_cam_data['parameters']['height'] > 0)
-            # assert(left_cam_data['parameters']['width'] > 0)
+            assert(left_cam_data['parameters']['height'] > 0)
+            assert(left_cam_data['parameters']['width'] > 0)
 
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # TODO(TONI): remove this hack after issue #37 is solved!!!!
-        left_cam_data['parameters']['height'] = self.camera_height
-        left_cam_data['parameters']['width']  = self.camera_width
-        right_cam_data['parameters']['height'] = self.camera_height
-        right_cam_data['parameters']['width']  = self.camera_width
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         self.cam_info_msg_left, self.cam_info_msg_right = \
             tesse_ros_bridge.utils.generate_camera_info(
                 left_cam_data, right_cam_data)
