@@ -28,6 +28,7 @@
   <arg name="frame_rate"            default="20.0"/>
   <arg name="imu_rate"              default="200"/>
   <arg name="enable_collision"      default="false"/>
+  <arg name="initial_scene"         default="2"/> <!-- 2: bright office scene -->
 
   <!-- Frame arguments -->
   <arg name="world_frame_id"        default="world"/>

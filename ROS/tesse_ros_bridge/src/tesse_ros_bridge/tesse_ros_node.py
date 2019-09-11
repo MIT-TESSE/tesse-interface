@@ -122,6 +122,10 @@ class TesseROSWrapper:
         enable_collision = rospy.get_param("~enable_collision", 0)
         self.setup_collision(enable_collision)
 
+        # Change scene
+        initial_scene = rospy.get_param("~initial_scene", 1)
+        self.change_scene(initial_scene)
+
         # Setup UdpListener.
         self.udp_listener = UdpListener(port=self.udp_port, rate=self.imu_rate)
         self.udp_listener.subscribe('udp_subscriber', self.udp_cb)
@@ -453,7 +457,7 @@ class TesseROSWrapper:
         """
         self.scene_request_service = rospy.Service("scene_change_request",
                                                     SceneRequestService,
-                                                    self.change_scene)
+                                                    self.rosservice_change_scene)
 
     def setup_collision(self, enable_collision):
         """ Enable/Disable collisions in Simulator. """
@@ -463,7 +467,7 @@ class TesseROSWrapper:
         else:
             self.env.send(ColliderRequest(enable=0))
         
-    def change_scene(self, req):
+    def rosservice_change_scene(self, req):
         """ Change scene ID of simulator as a ROS service. """
         # TODO(marcus): make this more elegant, like a None chek
         try:
@@ -471,6 +475,10 @@ class TesseROSWrapper:
             return True
         except:
             return False
+
+    def change_scene(self, scene_id):
+        """ Change scene ID of simulator. """
+        return self.env.request(SceneRequest(scene_id))
 
     def publish_tf(self, cur_tf, timestamp):
         """ Publish the ground-truth transform to the TF tree and to
