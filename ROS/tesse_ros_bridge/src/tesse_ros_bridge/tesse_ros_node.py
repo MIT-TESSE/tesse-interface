@@ -501,7 +501,6 @@ class TesseROSWrapper:
 
         self.gt_pub.publish(transform_stamped)
 
-
 if __name__ == '__main__':
     rospy.init_node("TesseROSWrapper_node")
     node = TesseROSWrapper()
