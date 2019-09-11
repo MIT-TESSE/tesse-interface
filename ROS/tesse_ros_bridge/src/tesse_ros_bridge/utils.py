@@ -181,6 +181,72 @@ def metadata_to_imu(processed_metadata, timestamp, frame_id):
     return imu
 
 
+def vfov_from_hfov(hfov, width, height):
+    """ Returns horiziontal FOV based on provided vertical FOV and dimensions.
+
+        Based on (this source)[http://paulbourke.net/miscellaneous/lens].
+
+        Args:
+            hfov: Horizontal FOV in degrees.
+            width: width of image, in pixels.
+            height: height of image, in pixels.
+
+        Returns:
+            A float representing the vertical FOV of the image in degrees.
+    """
+    return np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(hfov) / 2.0) * height / width))
+
+
+def hfov_from_vfov(vfov, width, height):
+    """ Returns vertical FOV based on provided horizontal FOV and dimensions.
+
+        Based on (this source)[http://paulbourke.net/miscellaneous/lens].
+
+        Args:
+            vfov: Vertical FOV in degrees.
+            width: width of image, in pixels.
+            height: height of image, in pixels.
+
+        Returns:
+            A float representing the horizontal FOV of the image in degrees.
+    """
+    return np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(vfov) / 2.0) * width / height))
+
+
+def fx_from_hfov(hfov, width):
+    """ Returns horizontal focal length based on provided horizontal FOV and
+        width.
+
+        Based on (this source)[http://paulbourke.net/miscellaneous/lens].
+
+        Args:
+            hfov: Horizontal FOV in degrees.
+            width: width of the image, in pixels.
+
+        Returns:
+            A float representing the horizontal focal length of the image in
+            pixels.
+    """
+    return (width / 2.0) / np.tan(np.deg2rad(hfov) / 2.0)
+
+
+def fy_from_vfov(vfov, height):
+    """ Returns vertical focal length based on provided vertical FOV and
+        height.
+
+        Based on (this source)[http://paulbourke.net/miscellaneous/lens].
+
+        Args:
+            vfov: Vertical FOV in degrees.
+            height: height of the image, in pixels.
+
+        Returns:
+            A float representing the vertical focal length of the image in
+            pixels.
+    """
+    return (height / 2.0) / np.tan(np.deg2rad(vfov) / 2.0)
+
+
 def generate_camera_info(left_cam_data, right_cam_data):
     """ Generates CameraInfo messages for left-cam and right-cam.
 
@@ -227,9 +293,10 @@ def generate_camera_info(left_cam_data, right_cam_data):
     # And they provide an OnGUI function to change that with a slider it seems.
     # TODO(Toni): Unity modifies horizontal accordingly! CHECK THAT THE FORMULAS MATCH!!
     # If we do not guess Unity's fov_horizontal correctly it will definitely break the VIO
-    fov_horizontal_left = np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(fov_vertical_left) / 2.0) * width_left / height_left))
-    fx = (width_left  / 2.0) / np.tan(np.deg2rad(fov_horizontal_left) / 2.0)
-    fy = (height_left / 2.0) / np.tan(np.deg2rad(fov_vertical_left)   / 2.0)
+    # fov_horizontal_left = np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(fov_vertical_left) / 2.0) * width_left / height_left))
+    fov_horizontal_left = hfov_from_vfov(fov_vertical_left, width_left, height_left)
+    fx = fx_from_hfov(fov_horizontal_left, width_left)
+    fy = fy_from_vfov(fov_vertical_left, height_left)
 
     print("FX:", fx)
     print("FY:", fy)
@@ -281,7 +348,7 @@ def generate_camera_info(left_cam_data, right_cam_data):
 # TODO(Toni): unit-test this!
 def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
     """ Create a CameraInfo ROS message from parameters.
-        Following convention in: 
+        Following convention in:
             http://docs.ros.org/melodic/api/sensor_msgs/html/msg/CameraInfo.html
 
         Header header    # Header timestamp should be acquisition time of image

@@ -48,7 +48,7 @@ class TesseROSWrapper:
         self.camera_height   = rospy.get_param("~camera_height", 480)
         assert(self.camera_height > 0)
         assert(self.camera_height % 2 == 0)
-        self.camera_fov      = rospy.get_param("~camera_fov", 60)
+        self.camera_fov      = rospy.get_param("~camera_vertical_fov", 60)
         assert(self.camera_fov > 0)
         self.stereo_baseline = rospy.get_param("~stereo_baseline", 0.2)
         assert(self.stereo_baseline > 0)
@@ -118,7 +118,7 @@ class TesseROSWrapper:
         # Setup collision
         self.enable_collision = rospy.get_param("~enable_collision", False)
         # is not working...
-        # self.setup_collision(self.enable_collision)
+        self.setup_collision(self.enable_collision)
 
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
@@ -319,7 +319,6 @@ class TesseROSWrapper:
                         self.camera_width,
                         self.camera_fov,
                         camera_id))
-                    print resp
 
         # TODO(marcus): add SetCameraOrientationRequest option.
         # TODO(Toni): this is hardcoded!! what if don't want IMU in the middle?
@@ -455,9 +454,10 @@ class TesseROSWrapper:
 
     def setup_collision(self, enable):
         resp = None
-        while resp is None:
-            print "TESSE_ROS_NODE: Setting collision to: ", enable
-            resp = self.env.request(ColliderRequest(enable))
+        # while resp is None:
+        print "TESSE_ROS_NODE: Setting collision to:", enable
+        print "NOTE: no response recieved. Fix issue #42."
+        resp = self.env.request(ColliderRequest(enable))
 
     def setup_ros_services(self):
         """ Setup ROS services related to the simulator.
