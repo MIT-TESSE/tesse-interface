@@ -70,6 +70,7 @@
     <param name="frame_rate"        value="$(arg frame_rate)"/>
     <param name="imu_rate"          value="$(arg imu_rate)"/>
     <param name="enable_collision"  value="$(arg enable_collision)"/>
+    <param name="initial_scene"     value="$(arg initial_scene)"/>
 
     <!-- Frame parameters -->
     <param name="world_frame_id"     value="$(arg world_frame_id)"/>
