@@ -116,9 +116,8 @@ class TesseROSWrapper:
         self.prev_enu_R_brh = np.identity(3)
 
         # Setup collision
-        self.enable_collision = rospy.get_param("~enable_collision", False)
-        # is not working...
-        # self.setup_collision(self.enable_collision)
+        self.enable_collision = rospy.get_param("~enable_collision", 0)
+        self.env.send(ColliderRequest(enable=self.enable_collision))
 
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
@@ -452,12 +451,6 @@ class TesseROSWrapper:
         # TODO(Toni): do a check here by requesting all camera info and checking that it is 
         # as the one requested!
         # Ok so let's check that the 
-
-    def setup_collision(self, enable):
-        resp = None
-        while resp is None:
-            print "TESSE_ROS_NODE: Setting collision to: ", enable
-            resp = self.env.request(ColliderRequest(enable))
 
     def setup_ros_services(self):
         """ Setup ROS services related to the simulator.
