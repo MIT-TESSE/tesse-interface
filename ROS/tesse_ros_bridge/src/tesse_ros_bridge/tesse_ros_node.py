@@ -101,13 +101,6 @@ class TesseROSWrapper:
         self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=10)
         self.gt_pub   = rospy.Publisher("gt", TransformStamped, queue_size=10)
 
-        # Initialize simulator
-        print "TESSE_ROS_NODE: Starting initialization."
-
-        # Change scene
-        initial_scene = rospy.get_param("~initial_scene", 1)
-        self.change_scene(initial_scene)
-
         # Setup ROS services.
         self.setup_ros_services()
 
@@ -121,6 +114,17 @@ class TesseROSWrapper:
         self.prev_time      = 0.0
         self.prev_vel_brh   = [0.0, 0.0, 0.0]
         self.prev_enu_R_brh = np.identity(3)
+
+        # Change scene
+        initial_scene = rospy.get_param("~initial_scene", 1)
+        self.change_scene(initial_scene)
+
+        # Setup collision
+        self.enable_collision = rospy.get_param("~enable_collision", False)
+        if self.enable_collision == True:
+            self.env.send(ColliderRequest(enable=1))
+        else:
+            self.env.send(ColliderRequest(enable=0))
 
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
@@ -140,13 +144,8 @@ class TesseROSWrapper:
         if self.teleop_enabled:
             rospy.Subscriber("/cmd_vel", Twist, self.cmd_cb)
 
-        # Do these last, because we are using self.env.send which has no
-        # feedback it seems.
-        # Setup collision
-        enable_collision = rospy.get_param("~enable_collision", False)
-        self.setup_collision(enable_collision)
 
-        print "TESSE_ROS_NODE: Initialization complete."
+        print("TESSE_ROS_NODE: Initialization complete.")
 
         self.last_cmd = Twist()
 
@@ -320,7 +319,8 @@ class TesseROSWrapper:
             if camera_id is not Camera.THIRD_PERSON:
                 resp = None
                 while resp is None:
-                    print "TESSE_ROS_NODE: Setting intrinsic parameters for camera: ", camera_id
+                    print("TESSE_ROS_NODE: Setting intrinsic parameters for camera: ",
+                        camera_id)
                     resp = self.env.request(SetCameraParametersRequest(
                         self.camera_height,
                         self.camera_width,
@@ -382,7 +382,7 @@ class TesseROSWrapper:
             if camera_id is not Camera.THIRD_PERSON:
                 resp = None
                 while resp is None:
-                    print "TESSE_ROS_NODE: Setting orientation of all cameras to identity..."
+                    print("TESSE_ROS_NODE: Setting orientation of all cameras to identity...")
                     resp = self.env.request(SetCameraOrientationRequest(
                             cameras_orientation.x,
                             cameras_orientation.y,
@@ -463,17 +463,6 @@ class TesseROSWrapper:
                                                     SceneRequestService,
                                                     self.rosservice_change_scene)
 
-    def setup_collision(self, enable_collision):
-        """ Enable/Disable collisions in Simulator. """
-        print("TESSE_ROS_NODE: Setup collisions to:", enable_collision)
-        resp = None
-        if enable_collision is True:
-            enable = 1
-        else:
-            enable = 0
-        while resp is None:
-            resp = self.env.request(ColliderRequest(enable=enable))
-
     def rosservice_change_scene(self, req):
         """ Change scene ID of simulator as a ROS service. """
         # TODO(marcus): make this more elegant, like a None chek
@@ -485,11 +474,7 @@ class TesseROSWrapper:
 
     def change_scene(self, scene_id):
         """ Change scene ID of simulator. """
-        print("TESSE_ROS_NODE: Setting scene to: ", scene_id)
-        resp = None
-        while resp is None:
-            resp = self.env.request(SceneRequest(scene_id))
-        return resp
+        return self.env.request(SceneRequest(scene_id))
 
     def publish_tf(self, cur_tf, timestamp):
         """ Publish the ground-truth transform to the TF tree and to
