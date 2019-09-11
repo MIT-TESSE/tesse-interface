@@ -439,6 +439,11 @@ class TesseROSWrapper:
             assert(right_cam_data['id'] == 1)
             assert(left_cam_data['parameters']['height'] > 0)
             assert(left_cam_data['parameters']['width'] > 0)
+        
+        assert(left_cam_data['parameters']['height'] == self.camera_height)
+        assert(left_cam_data['parameters']['width']  == self.camera_width)
+        assert(right_cam_data['parameters']['height'] == self.camera_height)
+        assert(right_cam_data['parameters']['width']  == self.camera_width)
 
         self.cam_info_msg_left, self.cam_info_msg_right = \
             tesse_ros_bridge.utils.generate_camera_info(
