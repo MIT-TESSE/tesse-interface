@@ -48,7 +48,7 @@ class TesseROSWrapper:
         self.camera_height   = rospy.get_param("~camera_height", 480)
         assert(self.camera_height > 0)
         assert(self.camera_height % 2 == 0)
-        self.camera_fov      = rospy.get_param("~camera_fov", 60)
+        self.camera_fov      = rospy.get_param("~camera_vertical_fov", 60)
         assert(self.camera_fov > 0)
         self.stereo_baseline = rospy.get_param("~stereo_baseline", 0.2)
         assert(self.stereo_baseline > 0)
@@ -57,7 +57,7 @@ class TesseROSWrapper:
         self.use_sim        = rospy.get_param("/use_sim_time", False)
         self.speedup_factor = rospy.get_param("~speedup_factor", 1.0)
         assert(self.speedup_factor > 0.0)  # We are  dividing by this so > 0
-        self.frame_rate     = rospy.get_param("~frame_rate", 20.0) 
+        self.frame_rate     = rospy.get_param("~frame_rate", 20.0)
         self.imu_rate       = rospy.get_param("~imu_rate", 200.0)
 
         # Output parameters:
@@ -318,7 +318,6 @@ class TesseROSWrapper:
                         self.camera_width,
                         self.camera_fov,
                         camera_id))
-                    print resp
 
         # TODO(marcus): add SetCameraOrientationRequest option.
         # TODO(Toni): this is hardcoded!! what if don't want IMU in the middle?
@@ -448,9 +447,9 @@ class TesseROSWrapper:
             tesse_ros_bridge.utils.generate_camera_info(
                 left_cam_data, right_cam_data)
 
-        # TODO(Toni): do a check here by requesting all camera info and checking that it is 
+        # TODO(Toni): do a check here by requesting all camera info and checking that it is
         # as the one requested!
-        # Ok so let's check that the 
+        # Ok so let's check that the
 
     def setup_ros_services(self):
         """ Setup ROS services related to the simulator.

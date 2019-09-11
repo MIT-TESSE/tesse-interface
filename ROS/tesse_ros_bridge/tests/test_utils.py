@@ -110,6 +110,33 @@ class TestUtilsOffline(unittest.TestCase):
 
         # TODO(marcus): add more checks
 
+    def test_vfov_from_hfov(self):
+        """Test proper generation of vertical FOV given horizontal FOV."""
+        width = 700
+        height = 480
+        hfov = 60
+
+        # TODO(marcus): make sure these expected values are correct!
+        actual = tesse_ros_bridge.utils.vfov_from_hfov(hfov, width, height)
+        expected = 43.19696059328124
+        self.assertEqual(actual, expected)
+
+    def test_f_from_hfov(self):
+        """Test focal length generation from FOV."""
+        width = 700
+        height = 480
+        hfov = 60
+        vfov = 60
+
+        # TODO(marcus): make sure these expected values are correct!
+        actual = tesse_ros_bridge.utils.fx_from_hfov(hfov, width)
+        expected = 606.2177826491071
+        self.assertEqual(actual, expected)
+
+        actual = tesse_ros_bridge.utils.fy_from_vfov(vfov, height)
+        expected = 415.69219381653056
+        self.assertEqual(actual, expected)
+
     def test_make_camera_info_msg(self):
         """Test generation of CameraInfo message for one camera"""
         # TODO(marcus): complete
