@@ -99,7 +99,6 @@ class TesseROSWrapper:
         # Setup ROS publishers
         self.imu_pub  = rospy.Publisher("imu", Imu, queue_size=10)
         self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=10)
-        self.gt_pub   = rospy.Publisher("gt", TransformStamped, queue_size=10)
 
         # Setup ROS services.
         self.setup_ros_services()
@@ -435,7 +434,7 @@ class TesseROSWrapper:
             assert(right_cam_data['id'] == 1)
             assert(left_cam_data['parameters']['height'] > 0)
             assert(left_cam_data['parameters']['width'] > 0)
-        
+
         assert(left_cam_data['parameters']['height'] == self.camera_height)
         assert(left_cam_data['parameters']['width']  == self.camera_width)
         assert(right_cam_data['parameters']['height'] == self.camera_height)
@@ -466,7 +465,7 @@ class TesseROSWrapper:
             self.env.send(ColliderRequest(enable=1))
         else:
             self.env.send(ColliderRequest(enable=0))
-        
+
     def rosservice_change_scene(self, req):
         """ Change scene ID of simulator as a ROS service. """
         # TODO(marcus): make this more elegant, like a None chek
@@ -481,8 +480,7 @@ class TesseROSWrapper:
         return self.env.request(SceneRequest(scene_id))
 
     def publish_tf(self, cur_tf, timestamp):
-        """ Publish the ground-truth transform to the TF tree and to
-            a separate ground truth topic as a TransformStamped.
+        """ Publish the ground-truth transform to the TF tree.
 
             Args:
                 cur_tf: A 4x4 numpy matrix containing the transformation from
@@ -493,23 +491,10 @@ class TesseROSWrapper:
         # Publish current transform to tf tree.
         trans = tesse_ros_bridge.utils.get_translation_part(cur_tf)
         quat = tesse_ros_bridge.utils.get_quaternion(cur_tf)
-        self.tf_broadcaster.sendTransform(trans, quat, timestamp, self.body_frame_id,
-                              self.world_frame_id)
+        self.tf_broadcaster.sendTransform(trans, quat, timestamp,
+                                          self.body_frame_id,
+                                          self.world_frame_id)
 
-        # Publish current transform to gt topic.
-        transform_stamped = TransformStamped()
-        transform_stamped.header.stamp = timestamp
-        transform_stamped.header.frame_id = self.body_frame_id
-        transform_stamped.child_frame_id = self.world_frame_id
-        transform_stamped.transform.translation.x = trans[0]
-        transform_stamped.transform.translation.y = trans[1]
-        transform_stamped.transform.translation.z = trans[2]
-        transform_stamped.transform.rotation.x = quat[0]
-        transform_stamped.transform.rotation.y = quat[1]
-        transform_stamped.transform.rotation.z = quat[2]
-        transform_stamped.transform.rotation.w = quat[3]
-
-        self.gt_pub.publish(transform_stamped)
 
 if __name__ == '__main__':
     rospy.init_node("TesseROSWrapper_node")
