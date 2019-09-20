@@ -250,7 +250,7 @@ class TesseROSWrapper:
             self.cam_info_right_pub.publish(self.cam_info_msg_right)
 
             self.publish_tf(
-                tesse_ros_bridge.utils.get_enuTbrh_mat(metadata),
+                tesse_ros_bridge.utils.get_enu_T_brh(metadata),
                     timestamp)
 
         except Exception as error:
@@ -435,7 +435,7 @@ class TesseROSWrapper:
             assert(right_cam_data['id'] == 1)
             assert(left_cam_data['parameters']['height'] > 0)
             assert(left_cam_data['parameters']['width'] > 0)
-        
+
         assert(left_cam_data['parameters']['height'] == self.camera_height)
         assert(left_cam_data['parameters']['width']  == self.camera_width)
         assert(right_cam_data['parameters']['height'] == self.camera_height)
@@ -466,7 +466,7 @@ class TesseROSWrapper:
             self.env.send(ColliderRequest(enable=1))
         else:
             self.env.send(ColliderRequest(enable=0))
-        
+
     def rosservice_change_scene(self, req):
         """ Change scene ID of simulator as a ROS service. """
         # TODO(marcus): make this more elegant, like a None chek
