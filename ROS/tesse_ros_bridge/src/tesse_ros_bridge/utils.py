@@ -432,7 +432,7 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh):
             Additionally, the 4x4 numpy matrix transform between the Unity
             world frame and the ENU right-handed frame is included.
     """
-    enu_T_brh = get_enuTbrh_mat(metadata)
+    enu_T_brh = get_enu_T_brh(metadata)
 
     # Calculate position and orientation in the right-hand body frame from enu.
     enu_t_brh = get_translation_part(enu_T_brh)
