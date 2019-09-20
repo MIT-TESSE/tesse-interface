@@ -432,17 +432,23 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh):
             Additionally, the 4x4 numpy matrix transform between the Unity
             world frame and the ENU right-handed frame is included.
     """
-    enu_T_brh = convert_coordinate_frame(metadata)
+    enu_T_brh = get_enu_T_brh(metadata)
 
     # Calculate position and orientation in the right-hand body frame from enu.
     enu_t_brh = get_translation_part(enu_T_brh)
     enu_R_brh = get_rotation_mat(enu_T_brh)
     enu_q_brh = get_quaternion(enu_T_brh)
 
-    vel_brh = get_vel_brh(metadata)
-    ang_vel_brh = get_ang_vel_brh(metadata)
-
     dt = metadata['time'] - prev_time
+
+    vel_brh = get_vel_brh_sim(metadata)
+    # ang_vel_brh = get_ang_vel_brh_sim(metadata)
+    ang_vel_brh = get_ang_vel_brh_logmap(enu_R_brh, prev_enu_R_brh, dt)
+
+    # This assertion is for future situations where roll and pitch are possible
+    # TODO(marcus): add this to unit tests.
+    # assert(np.allclose(get_ang_vel_brh_sim(metadata), ang_vel_brh)
+
     acc_brh = get_acc_brh(enu_R_brh, vel_brh, prev_vel_brh, prev_enu_R_brh, dt)
     # ang_acc_brh = get_ang_acc_brh()
 
@@ -460,7 +466,7 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh):
 
     return processed_dict
 
-def convert_coordinate_frame(metadata):
+def get_enu_T_brh(metadata):
     """ Convert position and quaternion from the Unity simulator's left-handed
         frame to a right-handed frame.
 
@@ -487,7 +493,7 @@ def convert_coordinate_frame(metadata):
 
     return enu_T_brh
 
-def get_vel_brh(metadata):
+def get_vel_brh_sim(metadata):
     """ Get velocity in the body right-handed frame from raw metadata.
 
         Metadata comes in as left-handed body-frame data, so we premultiply
@@ -503,7 +509,7 @@ def get_vel_brh(metadata):
     """
     return brh_T_blh[:3,:3].dot(metadata['velocity'])
 
-def get_ang_vel_brh(metadata):
+def get_ang_vel_brh_sim(metadata):
     """ Get angular velocity in the body right-handed frame from raw metadata.
 
         Metadata comes in as left-handed body-frame data, so we premultiply
@@ -518,10 +524,42 @@ def get_ang_vel_brh(metadata):
             in the body-right-handed frame as [wx,wy,wz].
     """
     # TODO(marcus): simulator must change to give ang_vel in body coords
-    #return brh_T_blh[:3,:3].dot(metadata['ang_vel'])
+    # return brh_T_blh[:3,:3].dot(metadata['ang_vel'])
+    # NOTE: currently there is not a clear understanding of how the UNITY
+    # body frame works. The above line *should* be right but isn't.
+    # use logmap version instead.
     return metadata['ang_vel']
     # OTW, use this:
     # return unity_T_blh[:3,:3].dot(metadata['ang_vel'])
+
+def get_ang_vel_brh_logmap(enu_R_brh, prev_enu_R_brh, dt):
+    """ Get angular velocity in the body right-handed frame from current and
+        previous ground-truth quaternion information.
+
+        This method uses the logmap (axis-angle representation) of the
+        relative rotation between the previous tf and the current one in
+        the ENU global frame.
+
+        Args:
+            enu_R_brh: A 3x3 numpy matrix representing the rotation matrix
+                from the body (right-handed) frame to the ENU frame.
+            prev_enu_R_brh: A 3x3 numpy matrix representing the rotation
+                matrix from the body (righ-handed) frame to the ENU frame.
+            dt: A float representing the elapsed time between the previous
+                frame and the current frame.
+
+        Returns:
+            A 1x3 numpy array containing angular velocity of the agent in the
+            body-right-handed farme as [wx,wy,wz].
+    """
+    enu_R_prev_enu = np.transpose(prev_enu_R_brh).dot(enu_R_brh)
+    enu_T_prev_enu = np.identity(4)
+    enu_T_prev_enu[:3,:3] = enu_R_prev_enu
+
+    enu_q_prev_enu = get_quaternion(enu_T_prev_enu)
+    enu_logmap_prev_enu = Rotation.from_quat(enu_q_prev_enu).as_rotvec()
+
+    return enu_logmap_prev_enu / dt
 
 def get_acc_brh(enu_R_brh, vel_brh, prev_vel_brh, prev_enu_R_brh, dt):
     """ Get linear acceleration in the body right-handed frame via a finite

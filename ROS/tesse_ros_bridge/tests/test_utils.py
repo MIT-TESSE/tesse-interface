@@ -221,12 +221,9 @@ class TestUtilsOffline(unittest.TestCase):
             tf.transformations.quaternion_matrix(dict_2['quaternion']))
 
         dt = dict_2['time'] - dict_1['time']
-        # expected_ang_vel = Rotation.from_quat(
-        #     tf.transformations.quaternion_from_matrix(np.transpose(
-        #         prev_enu_T_brh).dot(enu_T_brh))).as_rotvec() / dt
         expected_ang_vel = Rotation.from_quat(
             tf.transformations.quaternion_from_matrix(np.transpose(
-                prev_unity_T_brh).dot(unity_T_brh))).as_rotvec() / dt
+                prev_enu_T_brh).dot(enu_T_brh))).as_rotvec() / dt
         actual_ang_vel = proc_2['ang_vel']
 
         print "\nexpected ang_vel: ", expected_ang_vel

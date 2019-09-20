@@ -249,7 +249,7 @@ class TesseROSWrapper:
             self.cam_info_right_pub.publish(self.cam_info_msg_right)
 
             self.publish_tf(
-                tesse_ros_bridge.utils.convert_coordinate_frame(metadata),
+                tesse_ros_bridge.utils.get_enu_T_brh(metadata),
                     timestamp)
 
         except Exception as error:
