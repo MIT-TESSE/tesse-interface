@@ -5,7 +5,7 @@
 -->
 <launch>
   <arg name="ns"                    default="tesse"/>
-  <arg name="publish_point_clouds"  default="false"/>
+  <arg name="publish_point_clouds"  default="true"/>
   <arg name="visualize"             default="false"/>
   <arg name="teleop"                default="false"/>
   <arg name="enable_step_mode"      default="false"/>
