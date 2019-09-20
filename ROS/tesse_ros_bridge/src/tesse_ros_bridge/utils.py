@@ -466,7 +466,7 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh):
 
     return processed_dict
 
-def get_enuTbrh_mat(metadata):
+def get_enu_T_brh(metadata):
     """ Convert position and quaternion from the Unity simulator's left-handed
         frame to a right-handed frame.
 
