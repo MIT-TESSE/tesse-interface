@@ -51,6 +51,15 @@ class Interface(Enum):
     STEP = 3
 
 
+class ObjectType(Enum):
+    CUBE = 0
+
+
+class ObjectSpawnMethod(Enum):
+    USER = 0 # spawn object at user specified location
+    RANDOM = 1 # randomly spawn object in scene
+
+
 class AbstractMessage:
     __metaclass__ = ABCMeta
 
@@ -136,6 +145,38 @@ class ColliderRequest(PositionMessage):
 
     def __init__(self, enable=1):  # 0: disables collisions, 1: enables collisions
         super(ColliderRequest, self).__init__(('B', enable))
+
+
+class SpawnObjectRequest(PositionMessage):
+    __tag__ = 'oSpn'
+
+    def __init__(self, object_type=ObjectType.CUBE, method=ObjectSpawnMethod.USER,
+    position_x=0, position_y=0, position_z=0, orientation_x=0, orientation_y=0, orientation_z=0, orientation_w=0):
+        super(SpawnObjectRequest, self).__init__(
+            ('i', object_type.value),
+            ('i', method.value),
+            ('f', position_x),
+            ('f', position_y),
+            ('f', position_z),
+            ('f', orientation_x),
+            ('f', orientation_y),
+            ('f', orientation_z),
+            ('f', orientation_w),
+        )
+
+
+class RemoveObjectsRequest(PositionMessage):
+    __tag__ = 'oRem'
+
+    def __init__(self):
+        super(RemoveObjectsRequest, self).__init__()
+
+
+class ObjectsRequest(PositionMessage):
+    __tag__ = 'oReq'
+
+    def __init__(self):
+        super( ObjectsRequest, self).__init__()
 
 
 # METADATA INTERFACE

@@ -92,7 +92,7 @@ class Env(object):
 
         # get message tag
         tag = conn.recv(4).decode('utf-8')
-        if tag not in ['mult', 'meta', 'cami', 'scni']:
+        if tag not in ['mult', 'meta', 'cami', 'scni', 'obji']:
             conn.close()
             recv.close()
             raise ValueError('Unknown tag received {}'.format(tag))
