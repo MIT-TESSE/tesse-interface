@@ -168,8 +168,12 @@ class SpawnObjectRequest(PositionMessage):
 class RemoveObjectsRequest(PositionMessage):
     __tag__ = 'oRem'
 
-    def __init__(self):
-        super(RemoveObjectsRequest, self).__init__()
+    def __init__(self, ids=[]):
+        # Examples: 
+        #   - RemoveObjectsRequest([1,2,3]) removes ids 1, 2, and 3
+        #   - RemoveObjectsRequest() removes all objects
+        ids_with_encoding = [('i', id) for id in ids]
+        super(RemoveObjectsRequest, self).__init__(*ids_with_encoding)
 
 
 class ObjectsRequest(PositionMessage):
