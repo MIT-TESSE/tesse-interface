@@ -110,6 +110,33 @@ class TestUtilsOffline(unittest.TestCase):
 
         # TODO(marcus): add more checks
 
+    def test_vfov_from_hfov(self):
+        """Test proper generation of vertical FOV given horizontal FOV."""
+        width = 700
+        height = 480
+        hfov = 60
+
+        # TODO(marcus): make sure these expected values are correct!
+        actual = tesse_ros_bridge.utils.vfov_from_hfov(hfov, width, height)
+        expected = 43.19696059328124
+        self.assertEqual(actual, expected)
+
+    def test_f_from_hfov(self):
+        """Test focal length generation from FOV."""
+        width = 700
+        height = 480
+        hfov = 60
+        vfov = 60
+
+        # TODO(marcus): make sure these expected values are correct!
+        actual = tesse_ros_bridge.utils.fx_from_hfov(hfov, width)
+        expected = 606.2177826491071
+        self.assertEqual(actual, expected)
+
+        actual = tesse_ros_bridge.utils.fy_from_vfov(vfov, height)
+        expected = 415.69219381653056
+        self.assertEqual(actual, expected)
+
     def test_make_camera_info_msg(self):
         """Test generation of CameraInfo message for one camera"""
         # TODO(marcus): complete
@@ -194,12 +221,9 @@ class TestUtilsOffline(unittest.TestCase):
             tf.transformations.quaternion_matrix(dict_2['quaternion']))
 
         dt = dict_2['time'] - dict_1['time']
-        # expected_ang_vel = Rotation.from_quat(
-        #     tf.transformations.quaternion_from_matrix(np.transpose(
-        #         prev_enu_T_brh).dot(enu_T_brh))).as_rotvec() / dt
         expected_ang_vel = Rotation.from_quat(
             tf.transformations.quaternion_from_matrix(np.transpose(
-                prev_unity_T_brh).dot(unity_T_brh))).as_rotvec() / dt
+                prev_enu_T_brh).dot(enu_T_brh))).as_rotvec() / dt
         actual_ang_vel = proc_2['ang_vel']
 
         print "\nexpected ang_vel: ", expected_ang_vel

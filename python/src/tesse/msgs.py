@@ -131,6 +131,13 @@ class SceneRequest(PositionMessage):
         super(SceneRequest, self).__init__(('i', index))
 
 
+class ColliderRequest(PositionMessage):
+    __tag__ = 'sCOL'
+
+    def __init__(self, enable=1):  # 0: disables collisions, 1: enables collisions
+        super(ColliderRequest, self).__init__(('B', enable))
+
+
 # METADATA INTERFACE
 
 class MetadataMessage(AbstractMessage):

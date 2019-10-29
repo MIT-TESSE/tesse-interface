@@ -181,6 +181,72 @@ def metadata_to_imu(processed_metadata, timestamp, frame_id):
     return imu
 
 
+def vfov_from_hfov(hfov, width, height):
+    """ Returns horiziontal FOV based on provided vertical FOV and dimensions.
+
+        Based on (this source)[http://paulbourke.net/miscellaneous/lens].
+
+        Args:
+            hfov: Horizontal FOV in degrees.
+            width: width of image, in pixels.
+            height: height of image, in pixels.
+
+        Returns:
+            A float representing the vertical FOV of the image in degrees.
+    """
+    return np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(hfov) / 2.0) * height / width))
+
+
+def hfov_from_vfov(vfov, width, height):
+    """ Returns vertical FOV based on provided horizontal FOV and dimensions.
+
+        Based on (this source)[http://paulbourke.net/miscellaneous/lens].
+
+        Args:
+            vfov: Vertical FOV in degrees.
+            width: width of image, in pixels.
+            height: height of image, in pixels.
+
+        Returns:
+            A float representing the horizontal FOV of the image in degrees.
+    """
+    return np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(vfov) / 2.0) * width / height))
+
+
+def fx_from_hfov(hfov, width):
+    """ Returns horizontal focal length based on provided horizontal FOV and
+        width.
+
+        Based on (this source)[http://paulbourke.net/miscellaneous/lens].
+
+        Args:
+            hfov: Horizontal FOV in degrees.
+            width: width of the image, in pixels.
+
+        Returns:
+            A float representing the horizontal focal length of the image in
+            pixels.
+    """
+    return (width / 2.0) / np.tan(np.deg2rad(hfov) / 2.0)
+
+
+def fy_from_vfov(vfov, height):
+    """ Returns vertical focal length based on provided vertical FOV and
+        height.
+
+        Based on (this source)[http://paulbourke.net/miscellaneous/lens].
+
+        Args:
+            vfov: Vertical FOV in degrees.
+            height: height of the image, in pixels.
+
+        Returns:
+            A float representing the vertical focal length of the image in
+            pixels.
+    """
+    return (height / 2.0) / np.tan(np.deg2rad(vfov) / 2.0)
+
+
 def generate_camera_info(left_cam_data, right_cam_data):
     """ Generates CameraInfo messages for left-cam and right-cam.
 
@@ -227,12 +293,15 @@ def generate_camera_info(left_cam_data, right_cam_data):
     # And they provide an OnGUI function to change that with a slider it seems.
     # TODO(Toni): Unity modifies horizontal accordingly! CHECK THAT THE FORMULAS MATCH!!
     # If we do not guess Unity's fov_horizontal correctly it will definitely break the VIO
-    fov_horizontal_left = np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(fov_vertical_left) / 2.0) * width_left / height_left))
-    fx = (width_left  / 2.0) / np.tan(np.deg2rad(fov_horizontal_left) / 2.0)
-    fy = (height_left / 2.0) / np.tan(np.deg2rad(fov_vertical_left)   / 2.0)
+    # fov_horizontal_left = np.rad2deg(2.0 * np.arctan(np.tan(np.deg2rad(fov_vertical_left) / 2.0) * width_left / height_left))
+    fov_horizontal_left = hfov_from_vfov(fov_vertical_left, width_left, height_left)
+    fx = fx_from_hfov(fov_horizontal_left, width_left)
+    fy = fy_from_vfov(fov_vertical_left, height_left)
 
     print("FX:", fx)
     print("FY:", fy)
+    print("Width:", width_left)
+    print("Height:", height_left)
 
     # We only want to work with square pixels
     assert(fx == fy)
@@ -249,6 +318,14 @@ def generate_camera_info(left_cam_data, right_cam_data):
 
     # TODO(Toni): not necessarily! This is hardcoded!!
     baseline = np.abs(left_cam_data['position'][0] - right_cam_data['position'][0])
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    # TODO(Toni): REMOVE AFTER SOLVING ISSUE #37 in TESSE
+    baseline /= 4
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
+    ##########################! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ########################
 
     print("Baseline: ", baseline)
 
@@ -273,7 +350,7 @@ def generate_camera_info(left_cam_data, right_cam_data):
 # TODO(Toni): unit-test this!
 def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
     """ Create a CameraInfo ROS message from parameters.
-        Following convention in: 
+        Following convention in:
             http://docs.ros.org/melodic/api/sensor_msgs/html/msg/CameraInfo.html
 
         Header header    # Header timestamp should be acquisition time of image
@@ -312,7 +389,7 @@ def make_camera_info_msg(frame_id, width, height, fx, fy, cx, cy, Tx, Ty):
                          0, 1, 0,
                          0, 0, 1]
     # No distortion
-    camera_info_msg.distortion_model = "plumb_bob"
+    camera_info_msg.distortion_model = "radial-tangential"
     camera_info_msg.D = [0, 0, 0, 0]
 
     # Ty = 0 and Tx = -fx' * B, where B is the baseline between the cameras.
@@ -355,17 +432,23 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh):
             Additionally, the 4x4 numpy matrix transform between the Unity
             world frame and the ENU right-handed frame is included.
     """
-    enu_T_brh = convert_coordinate_frame(metadata)
+    enu_T_brh = get_enu_T_brh(metadata)
 
     # Calculate position and orientation in the right-hand body frame from enu.
     enu_t_brh = get_translation_part(enu_T_brh)
     enu_R_brh = get_rotation_mat(enu_T_brh)
     enu_q_brh = get_quaternion(enu_T_brh)
 
-    vel_brh = get_vel_brh(metadata)
-    ang_vel_brh = get_ang_vel_brh(metadata)
-
     dt = metadata['time'] - prev_time
+
+    vel_brh = get_vel_brh_sim(metadata)
+    # ang_vel_brh = get_ang_vel_brh_sim(metadata)
+    ang_vel_brh = get_ang_vel_brh_logmap(enu_R_brh, prev_enu_R_brh, dt)
+
+    # This assertion is for future situations where roll and pitch are possible
+    # TODO(marcus): add this to unit tests.
+    # assert(np.allclose(get_ang_vel_brh_sim(metadata), ang_vel_brh)
+
     acc_brh = get_acc_brh(enu_R_brh, vel_brh, prev_vel_brh, prev_enu_R_brh, dt)
     # ang_acc_brh = get_ang_acc_brh()
 
@@ -383,7 +466,7 @@ def process_metadata(metadata, prev_time, prev_vel_brh, prev_enu_R_brh):
 
     return processed_dict
 
-def convert_coordinate_frame(metadata):
+def get_enu_T_brh(metadata):
     """ Convert position and quaternion from the Unity simulator's left-handed
         frame to a right-handed frame.
 
@@ -410,7 +493,7 @@ def convert_coordinate_frame(metadata):
 
     return enu_T_brh
 
-def get_vel_brh(metadata):
+def get_vel_brh_sim(metadata):
     """ Get velocity in the body right-handed frame from raw metadata.
 
         Metadata comes in as left-handed body-frame data, so we premultiply
@@ -426,7 +509,7 @@ def get_vel_brh(metadata):
     """
     return brh_T_blh[:3,:3].dot(metadata['velocity'])
 
-def get_ang_vel_brh(metadata):
+def get_ang_vel_brh_sim(metadata):
     """ Get angular velocity in the body right-handed frame from raw metadata.
 
         Metadata comes in as left-handed body-frame data, so we premultiply
@@ -441,9 +524,42 @@ def get_ang_vel_brh(metadata):
             in the body-right-handed frame as [wx,wy,wz].
     """
     # TODO(marcus): simulator must change to give ang_vel in body coords
-    return brh_T_blh[:3,:3].dot(metadata['ang_vel'])
+    # return brh_T_blh[:3,:3].dot(metadata['ang_vel'])
+    # NOTE: currently there is not a clear understanding of how the UNITY
+    # body frame works. The above line *should* be right but isn't.
+    # use logmap version instead.
+    return metadata['ang_vel']
     # OTW, use this:
     # return unity_T_blh[:3,:3].dot(metadata['ang_vel'])
+
+def get_ang_vel_brh_logmap(enu_R_brh, prev_enu_R_brh, dt):
+    """ Get angular velocity in the body right-handed frame from current and
+        previous ground-truth quaternion information.
+
+        This method uses the logmap (axis-angle representation) of the
+        relative rotation between the previous tf and the current one in
+        the ENU global frame.
+
+        Args:
+            enu_R_brh: A 3x3 numpy matrix representing the rotation matrix
+                from the body (right-handed) frame to the ENU frame.
+            prev_enu_R_brh: A 3x3 numpy matrix representing the rotation
+                matrix from the body (righ-handed) frame to the ENU frame.
+            dt: A float representing the elapsed time between the previous
+                frame and the current frame.
+
+        Returns:
+            A 1x3 numpy array containing angular velocity of the agent in the
+            body-right-handed farme as [wx,wy,wz].
+    """
+    enu_R_prev_enu = np.transpose(prev_enu_R_brh).dot(enu_R_brh)
+    enu_T_prev_enu = np.identity(4)
+    enu_T_prev_enu[:3,:3] = enu_R_prev_enu
+
+    enu_q_prev_enu = get_quaternion(enu_T_prev_enu)
+    enu_logmap_prev_enu = Rotation.from_quat(enu_q_prev_enu).as_rotvec()
+
+    return enu_logmap_prev_enu / dt
 
 def get_acc_brh(enu_R_brh, vel_brh, prev_vel_brh, prev_enu_R_brh, dt):
     """ Get linear acceleration in the body right-handed frame via a finite
@@ -469,12 +585,11 @@ def get_acc_brh(enu_R_brh, vel_brh, prev_vel_brh, prev_enu_R_brh, dt):
             A 1x3 numpy array containing the linear accelerations of the agent
             in [ax,ay,az] format.
     """
-    assert(dt >= 0.0)
-
     vel_enu = enu_R_brh.dot(vel_brh)
     prev_vel_enu = prev_enu_R_brh.dot(prev_vel_brh)
 
     # Calculate the body acceleration via finite difference method
+    assert(dt > 0.0)
     accel_enu = (vel_enu - prev_vel_enu) / dt
     return np.transpose(enu_R_brh).dot(accel_enu)
 

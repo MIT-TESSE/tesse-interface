@@ -48,7 +48,7 @@ class TesseROSWrapper:
         self.camera_height   = rospy.get_param("~camera_height", 480)
         assert(self.camera_height > 0)
         assert(self.camera_height % 2 == 0)
-        self.camera_fov      = rospy.get_param("~camera_fov", 60)
+        self.camera_fov      = rospy.get_param("~camera_vertical_fov", 60)
         assert(self.camera_fov > 0)
         self.stereo_baseline = rospy.get_param("~stereo_baseline", 0.2)
         assert(self.stereo_baseline > 0)
@@ -57,7 +57,7 @@ class TesseROSWrapper:
         self.use_sim        = rospy.get_param("/use_sim_time", False)
         self.speedup_factor = rospy.get_param("~speedup_factor", 1.0)
         assert(self.speedup_factor > 0.0)  # We are  dividing by this so > 0
-        self.frame_rate     = rospy.get_param("~frame_rate", 20.0) 
+        self.frame_rate     = rospy.get_param("~frame_rate", 20.0)
         self.imu_rate       = rospy.get_param("~imu_rate", 200.0)
 
         # Output parameters:
@@ -99,15 +99,15 @@ class TesseROSWrapper:
         # Setup ROS publishers
         self.imu_pub  = rospy.Publisher("imu", Imu, queue_size=10)
         self.odom_pub = rospy.Publisher("odom", Odometry, queue_size=10)
-        self.gt_pub   = rospy.Publisher("gt", TransformStamped, queue_size=10)
 
         # Setup ROS services.
         self.setup_ros_services()
 
         # Transform broadcasters.
         self.tf_broadcaster = tf.TransformBroadcaster()
-        self.static_tf_broadcaster_left_cam = tf2_ros.StaticTransformBroadcaster()
-        self.static_tf_broadcaster_right_cam = tf2_ros.StaticTransformBroadcaster()
+        # Don't call static_tf_broadcaster.sendTransform multiple times.
+        # Rather call it once with multiple static tfs! Check issue #40
+        self.static_tf_broadcaster = tf2_ros.StaticTransformBroadcaster()
 
         # Required states for finite difference calculations.
         self.prev_time      = 0.0
@@ -116,6 +116,14 @@ class TesseROSWrapper:
 
         # Setup camera parameters and extrinsics in the simulator per spec.
         self.setup_cameras()
+
+        # Setup collision
+        enable_collision = rospy.get_param("~enable_collision", 0)
+        self.setup_collision(enable_collision)
+
+        # Change scene
+        initial_scene = rospy.get_param("~initial_scene", 1)
+        self.change_scene(initial_scene)
 
         # Setup UdpListener.
         self.udp_listener = UdpListener(port=self.udp_port, rate=self.imu_rate)
@@ -241,7 +249,7 @@ class TesseROSWrapper:
             self.cam_info_right_pub.publish(self.cam_info_msg_right)
 
             self.publish_tf(
-                tesse_ros_bridge.utils.convert_coordinate_frame(metadata),
+                tesse_ros_bridge.utils.get_enu_T_brh(metadata),
                     timestamp)
 
         except Exception as error:
@@ -313,7 +321,6 @@ class TesseROSWrapper:
                         self.camera_width,
                         self.camera_fov,
                         camera_id))
-                    print resp
 
         # TODO(marcus): add SetCameraOrientationRequest option.
         # TODO(Toni): this is hardcoded!! what if don't want IMU in the middle?
@@ -365,24 +372,18 @@ class TesseROSWrapper:
                     left_cam_position.z,
                     Camera.SEGMENTATION))
 
-        resp = None
-        while resp is None:
-            print "TESSE_ROS_NODE: Setting position of third-person camera..."
-            resp = self.env.request(SetCameraPositionRequest(
-                    left_cam_position.x,
-                    left_cam_position.y,
-                    left_cam_position.z,
-                    Camera.THIRD_PERSON))
-
-        resp = None
-        while resp is None:
-            print("TESSE_ROS_NODE: Setting orientation of all cameras to identity...")
-            resp = self.env.request(SetCameraOrientationRequest(
-                    cameras_orientation.x,
-                    cameras_orientation.y,
-                    cameras_orientation.z,
-                    cameras_orientation.w,
-                    Camera.ALL))
+        for camera in self.cameras:
+            camera_id = camera[0]
+            if camera_id is not Camera.THIRD_PERSON:
+                resp = None
+                while resp is None:
+                    print("TESSE_ROS_NODE: Setting orientation of all cameras to identity...")
+                    resp = self.env.request(SetCameraOrientationRequest(
+                            cameras_orientation.x,
+                            cameras_orientation.y,
+                            cameras_orientation.z,
+                            cameras_orientation.w,
+                            camera_id))
 
         # Depth camera multiplier factor.
         depth_cam_data = None
@@ -411,8 +412,7 @@ class TesseROSWrapper:
         static_tf_cam_right.child_frame_id        = self.right_cam_frame_id
 
         # Send static tfs over the ROS network
-        self.static_tf_broadcaster_left_cam.sendTransform(static_tf_cam_left)
-        self.static_tf_broadcaster_right_cam.sendTransform(static_tf_cam_right)
+        self.static_tf_broadcaster.sendTransform([static_tf_cam_right, static_tf_cam_left])
 
         # Camera_info publishing for VIO.
         left_cam_data = None
@@ -422,9 +422,8 @@ class TesseROSWrapper:
                 self.env.request(
                     CameraInformationRequest(Camera.RGB_LEFT)).metadata)
             assert(left_cam_data['id'] == 0)
-            # TODO(Toni): reenable when issue #37 is solved.
-            # assert(left_cam_data['parameters']['height'] > 0)
-            # assert(left_cam_data['parameters']['width'] > 0)
+            assert(left_cam_data['parameters']['height'] > 0)
+            assert(left_cam_data['parameters']['width'] > 0)
 
         right_cam_data = None
         while right_cam_data is None:
@@ -433,26 +432,21 @@ class TesseROSWrapper:
                 self.env.request(
                     CameraInformationRequest(Camera.RGB_RIGHT)).metadata)
             assert(right_cam_data['id'] == 1)
-            # TODO(Toni): reenable when issue #37 is solved.
-            # assert(left_cam_data['parameters']['height'] > 0)
-            # assert(left_cam_data['parameters']['width'] > 0)
+            assert(left_cam_data['parameters']['height'] > 0)
+            assert(left_cam_data['parameters']['width'] > 0)
 
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # TODO(TONI): remove this hack after issue #37 is solved!!!!
-        left_cam_data['parameters']['height'] = self.camera_height
-        left_cam_data['parameters']['width']  = self.camera_width
-        right_cam_data['parameters']['height'] = self.camera_height
-        right_cam_data['parameters']['width']  = self.camera_width
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        assert(left_cam_data['parameters']['height'] == self.camera_height)
+        assert(left_cam_data['parameters']['width']  == self.camera_width)
+        assert(right_cam_data['parameters']['height'] == self.camera_height)
+        assert(right_cam_data['parameters']['width']  == self.camera_width)
+
         self.cam_info_msg_left, self.cam_info_msg_right = \
             tesse_ros_bridge.utils.generate_camera_info(
                 left_cam_data, right_cam_data)
 
-        # TODO(Toni): do a check here by requesting all camera info and checking that it is 
+        # TODO(Toni): do a check here by requesting all camera info and checking that it is
         # as the one requested!
-
+        # Ok so let's check that the
 
     def setup_ros_services(self):
         """ Setup ROS services related to the simulator.
@@ -462,9 +456,17 @@ class TesseROSWrapper:
         """
         self.scene_request_service = rospy.Service("scene_change_request",
                                                     SceneRequestService,
-                                                    self.change_scene)
+                                                    self.rosservice_change_scene)
 
-    def change_scene(self, req):
+    def setup_collision(self, enable_collision):
+        """ Enable/Disable collisions in Simulator. """
+        print("TESSE_ROS_NODE: Setup collisions to:", enable_collision)
+        if enable_collision is True:
+            self.env.send(ColliderRequest(enable=1))
+        else:
+            self.env.send(ColliderRequest(enable=0))
+
+    def rosservice_change_scene(self, req):
         """ Change scene ID of simulator as a ROS service. """
         # TODO(marcus): make this more elegant, like a None chek
         try:
@@ -473,9 +475,12 @@ class TesseROSWrapper:
         except:
             return False
 
+    def change_scene(self, scene_id):
+        """ Change scene ID of simulator. """
+        return self.env.request(SceneRequest(scene_id))
+
     def publish_tf(self, cur_tf, timestamp):
-        """ Publish the ground-truth transform to the TF tree and to
-            a separate ground truth topic as a TransformStamped.
+        """ Publish the ground-truth transform to the TF tree.
 
             Args:
                 cur_tf: A 4x4 numpy matrix containing the transformation from
@@ -486,23 +491,9 @@ class TesseROSWrapper:
         # Publish current transform to tf tree.
         trans = tesse_ros_bridge.utils.get_translation_part(cur_tf)
         quat = tesse_ros_bridge.utils.get_quaternion(cur_tf)
-        self.tf_broadcaster.sendTransform(trans, quat, timestamp, self.body_frame_id,
-                              self.world_frame_id)
-
-        # Publish current transform to gt topic.
-        transform_stamped = TransformStamped()
-        transform_stamped.header.stamp = timestamp
-        transform_stamped.header.frame_id = self.body_frame_id
-        transform_stamped.child_frame_id = self.world_frame_id
-        transform_stamped.transform.translation.x = trans[0]
-        transform_stamped.transform.translation.y = trans[1]
-        transform_stamped.transform.translation.z = trans[2]
-        transform_stamped.transform.rotation.x = quat[0]
-        transform_stamped.transform.rotation.y = quat[1]
-        transform_stamped.transform.rotation.z = quat[2]
-        transform_stamped.transform.rotation.w = quat[3]
-
-        self.gt_pub.publish(transform_stamped)
+        self.tf_broadcaster.sendTransform(trans, quat, timestamp,
+                                          self.body_frame_id,
+                                          self.world_frame_id)
 
 
 if __name__ == '__main__':
