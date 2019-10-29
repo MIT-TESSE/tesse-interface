@@ -20,7 +20,8 @@
 
 import struct
 import numpy as np
-
+from PIL import Image
+import io
 from abc import ABCMeta
 from enum import Enum
 
@@ -296,8 +297,7 @@ class DataResponse(object):
             # img = np.frombuffer(images[:img_payload_length], dtype=np.uint8)  # python 3
             img = np.frombuffer(images[:img_payload_length].tobytes(), dtype=np.uint8)  # python 2/3
             if img_type == 'cRGB':
-                import cv2
-                img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)[:, :, ::-1]
+                img = Image.open(io.BytesIO(img))
             else:  # 'xRGB', 'xGRY', or 'xFLT
                 img = img.reshape(img_height, img_width, -1).squeeze()
                 img = np.flip(img, 0)  # flip vertically
