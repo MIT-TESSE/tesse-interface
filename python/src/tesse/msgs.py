@@ -240,30 +240,35 @@ class CameraInformationRequest(ImageMessage):
 class SetCameraParametersRequest(ImageMessage):
     __tag__ = 'sCaR'
 
-    def __init__(self, height_in_pixels=320, width_in_pixels=480, field_of_view=60, 
-    near_clip_plane=0.3, far_clip_plane=50, camera=Camera.ALL):
-        super(SetCameraParametersRequest, self).__init__(
-            ('i', height_in_pixels),
-            ('i', width_in_pixels),
-            ('f', field_of_view),
-            ('f', near_clip_plane),
-            ('f', far_clip_plane),
-            ('i', camera.value),
-            )
+    def __init__(self, 
+                 camera=Camera.ALL,
+                 height_in_pixels=320, 
+                 width_in_pixels=480, 
+                 field_of_view=60,
+                 near_clip_plane=0.3,
+                 far_clip_plane=50,
+                 ):
+        super(SetCameraParametersRequest, self).__init__(('i', camera.value),
+                                                         ('i', height_in_pixels), 
+                                                         ('i', width_in_pixels), 
+                                                         ('f', field_of_view), 
+                                                         ('f', near_clip_plane),
+                                                         ('f', far_clip_plane),
+                                                         )
 
 
 class SetCameraPositionRequest(ImageMessage):
     __tag__ = 'sCaP'
 
-    def __init__(self, x=0, y=0, z=0, camera=Camera.ALL):
-        super(SetCameraPositionRequest, self).__init__(('f', x), ('f', y), ('f', z), ('i', camera.value))
+    def __init__(self, camera=Camera.ALL, x=0, y=0, z=0):
+        super(SetCameraPositionRequest, self).__init__(('i', camera.value), ('f', x), ('f', y), ('f', z))
 
 
 class SetCameraOrientationRequest(ImageMessage):
     __tag__ = 'sCaQ'
 
-    def __init__(self, x=0, y=0, z=0, w=1, camera=Camera.ALL):
-        super(SetCameraOrientationRequest, self).__init__(('f', x), ('f', y), ('f', z), ('f', w), ('i', camera.value))
+    def __init__(self, camera=Camera.ALL, x=0, y=0, z=0, w=1):
+        super(SetCameraOrientationRequest, self).__init__(('i', camera.value), ('f', x), ('f', y), ('f', z), ('f', w))
 
 
 class DataResponse(object):
