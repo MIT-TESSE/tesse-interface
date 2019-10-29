@@ -317,10 +317,11 @@ class TesseROSWrapper:
                     print("TESSE_ROS_NODE: Setting intrinsic parameters for camera: ",
                         camera_id)
                     resp = self.env.request(SetCameraParametersRequest(
+                        camera_id,
                         self.camera_height,
                         self.camera_width,
                         self.camera_fov,
-                        camera_id))
+                        ))
 
         # TODO(marcus): add SetCameraOrientationRequest option.
         # TODO(Toni): this is hardcoded!! what if don't want IMU in the middle?
@@ -340,37 +341,41 @@ class TesseROSWrapper:
         while resp is None:
             print "TESSE_ROS_NODE: Setting position of left camera..."
             resp = self.env.request(SetCameraPositionRequest(
+                    Camera.RGB_LEFT,
                     left_cam_position.x,
                     left_cam_position.y,
                     left_cam_position.z,
-                    Camera.RGB_LEFT))
+                    ))
 
         resp = None
         while resp is None:
             print "TESSE_ROS_NODE: Setting position of right camera..."
             resp = self.env.request(SetCameraPositionRequest(
+                    Camera.RGB_RIGHT,
                     right_cam_position.x,
                     right_cam_position.y,
                     right_cam_position.z,
-                    Camera.RGB_RIGHT))
+                    ))
 
         # Set position depth and segmentation cameras to align with left:
         resp = None
         while resp is None:
             print "TESSE_ROS_NODE: Setting position of depth camera..."
             resp = self.env.request(SetCameraPositionRequest(
+                    Camera.DEPTH,
                     left_cam_position.x,
                     left_cam_position.y,
                     left_cam_position.z,
-                    Camera.DEPTH))
+                    ))
         resp = None
         while resp is None:
             print "TESSE_ROS_NODE: Setting position of segmentation camera..."
             resp = self.env.request(SetCameraPositionRequest(
+                    Camera.SEGMENTATION,
                     left_cam_position.x,
                     left_cam_position.y,
                     left_cam_position.z,
-                    Camera.SEGMENTATION))
+                    ))
 
         for camera in self.cameras:
             camera_id = camera[0]
@@ -379,11 +384,12 @@ class TesseROSWrapper:
                 while resp is None:
                     print("TESSE_ROS_NODE: Setting orientation of all cameras to identity...")
                     resp = self.env.request(SetCameraOrientationRequest(
+                            camera_id,
                             cameras_orientation.x,
                             cameras_orientation.y,
                             cameras_orientation.z,
                             cameras_orientation.w,
-                            camera_id))
+                            ))
 
         # Depth camera multiplier factor.
         depth_cam_data = None
