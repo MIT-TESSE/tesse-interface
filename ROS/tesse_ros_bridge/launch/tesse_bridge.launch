@@ -5,7 +5,7 @@
 -->
 <launch>
   <arg name="ns"                    default="tesse"/>
-  <arg name="publish_point_clouds"  default="true"/>
+  <arg name="publish_point_clouds"  default="false"/>
   <arg name="visualize"             default="false"/>
   <arg name="teleop"                default="false"/>
   <arg name="enable_step_mode"      default="false"/>
@@ -20,7 +20,7 @@
   <arg name="vertical_fov"          default="60"/>
   <arg name="width"                 default="720"/>
   <arg name="height"                default="480"/>
-  <arg name="stereo_baseline"       default="0.40"/>
+  <arg name="stereo_baseline"       default="0.10"/>
 
   <!-- Sim arguments -->
   <arg name="use_sim_time"          default="true"/>
