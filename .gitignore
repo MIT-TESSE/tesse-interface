@@ -1,3 +1,9 @@
+% Ignore rosbags
+*.bag
+
+% Ignore compressed files
+*.zip
+
 *.swp
 .ipynb_checkpoints/
 
