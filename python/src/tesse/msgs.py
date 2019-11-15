@@ -20,7 +20,8 @@
 
 import struct
 import numpy as np
-
+from PIL import Image
+import io
 from abc import ABCMeta
 from enum import Enum
 
@@ -49,6 +50,15 @@ class Interface(Enum):
     METADATA = 1
     IMAGE = 2
     STEP = 3
+
+
+class ObjectType(Enum):
+    CUBE = 0
+
+
+class ObjectSpawnMethod(Enum):
+    USER = 0 # spawn object at user specified location
+    RANDOM = 1 # randomly spawn object in scene
 
 
 class AbstractMessage:
@@ -138,6 +148,42 @@ class ColliderRequest(PositionMessage):
         super(ColliderRequest, self).__init__(('B', enable))
 
 
+class SpawnObjectRequest(PositionMessage):
+    __tag__ = 'oSpn'
+
+    def __init__(self, object_type=ObjectType.CUBE, method=ObjectSpawnMethod.USER,
+    position_x=0, position_y=0, position_z=0, orientation_x=0, orientation_y=0, orientation_z=0, orientation_w=0):
+        super(SpawnObjectRequest, self).__init__(
+            ('i', object_type.value),
+            ('i', method.value),
+            ('f', position_x),
+            ('f', position_y),
+            ('f', position_z),
+            ('f', orientation_x),
+            ('f', orientation_y),
+            ('f', orientation_z),
+            ('f', orientation_w),
+        )
+
+
+class RemoveObjectsRequest(PositionMessage):
+    __tag__ = 'oRem'
+
+    def __init__(self, ids=[]):
+        # Examples: 
+        #   - RemoveObjectsRequest([1,2,3]) removes ids 1, 2, and 3
+        #   - RemoveObjectsRequest() removes all objects
+        ids_with_encoding = [('i', id) for id in ids]
+        super(RemoveObjectsRequest, self).__init__(*ids_with_encoding)
+
+
+class ObjectsRequest(PositionMessage):
+    __tag__ = 'oReq'
+
+    def __init__(self):
+        super( ObjectsRequest, self).__init__()
+
+
 # METADATA INTERFACE
 
 class MetadataMessage(AbstractMessage):
@@ -200,11 +246,15 @@ class SetCameraParametersRequest(ImageMessage):
                  height_in_pixels=320, 
                  width_in_pixels=480, 
                  field_of_view=60,
+                 near_clip_plane=0.3,
+                 far_clip_plane=50,
                  ):
-        super(SetCameraParametersRequest, self).__init__(('i', height_in_pixels), 
+        super(SetCameraParametersRequest, self).__init__(('i', camera.value),
+                                                         ('i', height_in_pixels), 
                                                          ('i', width_in_pixels), 
                                                          ('f', field_of_view), 
-                                                         ('i', camera.value),
+                                                         ('f', near_clip_plane),
+                                                         ('f', far_clip_plane),
                                                          )
 
 
@@ -212,14 +262,14 @@ class SetCameraPositionRequest(ImageMessage):
     __tag__ = 'sCaP'
 
     def __init__(self, camera=Camera.ALL, x=0, y=0, z=0):
-        super(SetCameraPositionRequest, self).__init__(('f', x), ('f', y), ('f', z), ('i', camera.value))
+        super(SetCameraPositionRequest, self).__init__(('i', camera.value), ('f', x), ('f', y), ('f', z))
 
 
 class SetCameraOrientationRequest(ImageMessage):
     __tag__ = 'sCaQ'
 
     def __init__(self, camera=Camera.ALL, x=0, y=0, z=0, w=1):
-        super(SetCameraOrientationRequest, self).__init__(('f', x), ('f', y), ('f', z), ('f', w), ('i', camera.value))
+        super(SetCameraOrientationRequest, self).__init__(('i', camera.value), ('f', x), ('f', y), ('f', z), ('f', w))
 
 
 class DataResponse(object):
@@ -247,8 +297,7 @@ class DataResponse(object):
             # img = np.frombuffer(images[:img_payload_length], dtype=np.uint8)  # python 3
             img = np.frombuffer(images[:img_payload_length].tobytes(), dtype=np.uint8)  # python 2/3
             if img_type == 'cRGB':
-                import cv2
-                img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)[:, :, ::-1]
+                img = Image.open(io.BytesIO(img))
             else:  # 'xRGB', 'xGRY', or 'xFLT
                 img = img.reshape(img_height, img_width, -1).squeeze()
                 img = np.flip(img, 0)  # flip vertically
