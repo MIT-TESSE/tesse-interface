@@ -42,10 +42,15 @@
   <node ns="$(arg ns)" name="tesse_ros_bridge" pkg="tesse_ros_bridge"
         type="tesse_ros_node.py" output="screen">
     <!-- Topics -->
-    <remap from="left_cam"     to="left_cam"/>
-    <remap from="right_cam"    to="right_cam"/>
-    <remap from="segmentation" to="segmentation"/>
-    <remap from="depth"        to="depth"/>
+    <remap from="left_cam/image_raw"     to="left_cam/image_raw"/>
+    <remap from="right_cam/image_raw"    to="right_cam/image_raw"/>
+    <remap from="segmentation/image_raw" to="segmentation/image_raw"/>
+    <remap from="depth/image_raw"        to="depth/image_raw"/>
+
+    <remap from="left_cam/camera_info"     to="left_cam/camera_info"/>
+    <remap from="right_cam/camera_info"    to="right_cam/camera_info"/>
+    <remap from="segmentation/camera_info" to="segmentation/camera_info"/>
+    <remap from="depth/camera_info"        to="depth/camera_info"/>
 
     <param name="teleop"           value="$(arg teleop)"/>
     <param name="enable_step_mode" value="$(arg enable_step_mode)"/>
