@@ -68,16 +68,20 @@ class UdpListener(threading.Thread):
 
     def run(self):
         last_game_time = -1e6  # initialize
+        min_dt = (1.0/self.rate) - self.__epsilon_timing__
         while self.alive.isSet():
             try:
                 data = self.sock.recv(1024)
+
+                # Process the message if the game has elapsed *at least* 1/self.rate
+                game_time = float(ET.fromstring(data).find('time').text)
+                dt = game_time - last_game_time
+
+                if self.rate is None or dt >= min_dt:
+                    for name in self.handlers:
+                        self.handlers[name](data)
+                    last_game_time = game_time
+
             except socket.timeout as error:
                 print("UdpListener error: ", error)
                 continue
-
-            # Process the message if the game has elapsed *at least* 1/self.rate
-            game_time = float(ET.fromstring(data.decode('utf-8')).find('time').text)
-            if self.rate is None or game_time - last_game_time >= 1.0/self.rate - self.__epsilon_timing__:
-                for name in self.handlers:
-                    self.handlers[name](data)
-                last_game_time = game_time
