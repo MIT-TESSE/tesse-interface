@@ -134,6 +134,13 @@ class SetFrameRate(PositionMessage):
         super(SetFrameRate, self).__init__(('I', frame_rate))
 
 
+class SetRandomSeed(PositionMessage):
+    __tag__ = 'SEED'
+
+    def __init__(self, seed=0):
+        super(SetRandomSeed, self).__init__(('i', seed))
+
+
 class SceneRequest(PositionMessage):
     __tag__ = 'CScN'
 
