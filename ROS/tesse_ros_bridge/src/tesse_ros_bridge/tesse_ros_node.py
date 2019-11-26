@@ -82,10 +82,10 @@ class TesseROSWrapper:
                       (Camera.SEGMENTATION, Compression.OFF, Channels.THREE,  self.left_cam_frame_id),
                       (Camera.DEPTH,        Compression.OFF, Channels.THREE,  self.left_cam_frame_id)]
 
-        self.img_pubs = [rospy.Publisher("left_cam",     Image, queue_size=10),
-                         rospy.Publisher("right_cam",    Image, queue_size=10),
-                         rospy.Publisher("segmentation", Image, queue_size=10),
-                         rospy.Publisher("depth",        Image, queue_size=10)]
+        self.img_pubs = [rospy.Publisher("left_cam/image_raw",     Image, queue_size=10),
+                         rospy.Publisher("right_cam/image_raw",    Image, queue_size=10),
+                         rospy.Publisher("segmentation/image_raw", Image, queue_size=10),
+                         rospy.Publisher("depth/image_raw",        Image, queue_size=10)]
 
         # TODO(Marcus): document what is this?
         self.far_draw_dist = None
@@ -93,8 +93,13 @@ class TesseROSWrapper:
         # Camera information members.
         self.cam_info_left_pub = rospy.Publisher("left_cam/camera_info",   CameraInfo, queue_size=10)
         self.cam_info_right_pub = rospy.Publisher("right_cam/camera_info", CameraInfo, queue_size=10)
+        self.cam_info_segmentation_pub = rospy.Publisher("segmentation/camera_info", CameraInfo, queue_size=10)
+        self.cam_info_depth_pub = rospy.Publisher("depth/camera_info", CameraInfo, queue_size=10)
+
         self.cam_info_msg_left = None
         self.cam_info_msg_right = None
+        self.cam_info_msg_segmentation = None
+        self.cam_info_msg_depth = None
 
         # Setup ROS publishers
         self.imu_pub  = rospy.Publisher("imu", Imu, queue_size=10)
@@ -245,8 +250,13 @@ class TesseROSWrapper:
             # Publish both CameraInfo messages.
             self.cam_info_msg_left.header.stamp = timestamp
             self.cam_info_msg_right.header.stamp = timestamp
+            self.cam_info_msg_segmentation.header.stamp = timestamp
+            self.cam_info_msg_depth.header.stamp = timestamp
+
             self.cam_info_left_pub.publish(self.cam_info_msg_left)
             self.cam_info_right_pub.publish(self.cam_info_msg_right)
+            self.cam_info_segmentation_pub.publish(self.cam_info_msg_segmentation)
+            self.cam_info_depth_pub.publish(self.cam_info_msg_depth)
 
             self.publish_tf(
                 tesse_ros_bridge.utils.get_enu_T_brh(metadata),
@@ -449,6 +459,11 @@ class TesseROSWrapper:
         self.cam_info_msg_left, self.cam_info_msg_right = \
             tesse_ros_bridge.utils.generate_camera_info(
                 left_cam_data, right_cam_data)
+        
+        # TODO(Toni) we should extend the above to get camera info for depth and segmentation!
+        # for now, just copy paste from left cam...
+        self.cam_info_msg_segmentation = self.cam_info_msg_left
+        self.cam_info_msg_depth = self.cam_info_msg_left
 
         # TODO(Toni): do a check here by requesting all camera info and checking that it is
         # as the one requested!

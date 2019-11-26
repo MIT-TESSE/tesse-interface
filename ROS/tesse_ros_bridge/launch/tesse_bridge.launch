@@ -5,7 +5,7 @@
 -->
 <launch>
   <arg name="ns"                    default="tesse"/>
-  <arg name="publish_point_clouds"  default="true"/>
+  <arg name="publish_point_clouds"  default="false"/>
   <arg name="visualize"             default="false"/>
   <arg name="teleop"                default="false"/>
   <arg name="enable_step_mode"      default="false"/>
@@ -20,7 +20,7 @@
   <arg name="vertical_fov"          default="60"/>
   <arg name="width"                 default="720"/>
   <arg name="height"                default="480"/>
-  <arg name="stereo_baseline"       default="0.40"/>
+  <arg name="stereo_baseline"       default="0.10"/>
 
   <!-- Sim arguments -->
   <arg name="use_sim_time"          default="true"/>
@@ -42,10 +42,15 @@
   <node ns="$(arg ns)" name="tesse_ros_bridge" pkg="tesse_ros_bridge"
         type="tesse_ros_node.py" output="screen">
     <!-- Topics -->
-    <remap from="left_cam"     to="left_cam"/>
-    <remap from="right_cam"    to="right_cam"/>
-    <remap from="segmentation" to="segmentation"/>
-    <remap from="depth"        to="depth"/>
+    <remap from="left_cam/image_raw"     to="left_cam/image_raw"/>
+    <remap from="right_cam/image_raw"    to="right_cam/image_raw"/>
+    <remap from="segmentation/image_raw" to="segmentation/image_raw"/>
+    <remap from="depth/image_raw"        to="depth/image_raw"/>
+
+    <remap from="left_cam/camera_info"     to="left_cam/camera_info"/>
+    <remap from="right_cam/camera_info"    to="right_cam/camera_info"/>
+    <remap from="segmentation/camera_info" to="segmentation/camera_info"/>
+    <remap from="depth/camera_info"        to="depth/camera_info"/>
 
     <param name="teleop"           value="$(arg teleop)"/>
     <param name="enable_step_mode" value="$(arg enable_step_mode)"/>
