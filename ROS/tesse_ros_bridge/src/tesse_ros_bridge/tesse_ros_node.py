@@ -9,7 +9,8 @@ import rospy
 import tf
 import tf2_ros
 from std_msgs.msg import Header
-from sensor_msgs.msg import Image, Imu, CameraInfo
+from sensor_msgs.msg import Image as ImageMsg
+from sensor_msgs.msg import Imu, CameraInfo
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose, PoseStamped, Point, \
      PointStamped, TransformStamped, Twist, Quaternion
@@ -82,10 +83,10 @@ class TesseROSWrapper:
                       (Camera.SEGMENTATION, Compression.OFF, Channels.THREE,  self.left_cam_frame_id),
                       (Camera.DEPTH,        Compression.OFF, Channels.THREE,  self.left_cam_frame_id)]
 
-        self.img_pubs = [rospy.Publisher("left_cam/image_raw",     Image, queue_size=10),
-                         rospy.Publisher("right_cam/image_raw",    Image, queue_size=10),
-                         rospy.Publisher("segmentation/image_raw", Image, queue_size=10),
-                         rospy.Publisher("depth/image_raw",        Image, queue_size=10)]
+        self.img_pubs = [rospy.Publisher("left_cam/image_raw",     ImageMsg, queue_size=10),
+                         rospy.Publisher("right_cam/image_raw",    ImageMsg, queue_size=10),
+                         rospy.Publisher("segmentation/image_raw", ImageMsg, queue_size=10),
+                         rospy.Publisher("depth/image_raw",        ImageMsg, queue_size=10)]
 
         # TODO(Marcus): document what is this?
         self.far_draw_dist = None
