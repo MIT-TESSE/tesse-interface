@@ -52,10 +52,6 @@ class Interface(Enum):
     STEP = 3
 
 
-class ObjectType(Enum):
-    CUBE = 0
-
-
 class ObjectSpawnMethod(Enum):
     USER = 0 # spawn object at user specified location
     RANDOM = 1 # randomly spawn object in scene
@@ -158,10 +154,10 @@ class ColliderRequest(PositionMessage):
 class SpawnObjectRequest(PositionMessage):
     __tag__ = 'oSpn'
 
-    def __init__(self, object_type=ObjectType.CUBE, method=ObjectSpawnMethod.USER,
+    def __init__(self, object_index=0, method=ObjectSpawnMethod.USER,
     position_x=0, position_y=0, position_z=0, orientation_x=0, orientation_y=0, orientation_z=0, orientation_w=0):
         super(SpawnObjectRequest, self).__init__(
-            ('i', object_type.value),
+            ('i', object_index),
             ('i', method.value),
             ('f', position_x),
             ('f', position_y),
