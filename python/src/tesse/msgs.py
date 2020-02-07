@@ -313,16 +313,12 @@ class DataResponse(object):
 
             if img_type == 'xFLT':
                 # decode an RGBA color image into a float32 image
-                img = np.dot(img, np.asarray((1.0, 1.0/255.0, 1.0/(255.0*255.0), 1.0/(255.0*255.0*255.0)))).astype('float32')
+                img = np.dot(img, np.array([1.00000000e+00, 3.92156863e-03, 1.53787005e-05, 6.03086294e-08])).astype('float32')  # np.asarray((1.0, 1.0/255.0, 1.0/(255.0*255.0), 1.0/(255.0*255.0*255.0)))
                 img /= 255.0
 
             if img_type == 'xINT':
-                # decode RGBA image into a unsigned int image
-                img = np.dot(img, np.array([1, 255, 255**2])).astype(np.uint32)
-                # Background is given the maximum value by default. To avoid unwieldy numbers,
-                # all background will be set to 0 and objects IDs will begin at 1
-                max_object_id_value = 16646655
-                img[img == max_object_id_value] = 0
+                # decode RGBA image into a unsigned int image. Background is given the maximum value by default (16646655).
+                img = np.dot(img, np.array([1, 255, 65025])).astype(np.uint32)  # np.array([1, 255, 255**2])
 
             images = images[img_payload_length:]
 
