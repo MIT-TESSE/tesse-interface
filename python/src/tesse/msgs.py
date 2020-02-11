@@ -33,6 +33,7 @@ class Camera(Enum):
     SEGMENTATION = 2
     DEPTH = 3
     THIRD_PERSON = 4
+    INSTANCE_SEGMENTATION = 5
 
 
 class Compression(Enum):
@@ -216,7 +217,8 @@ class DataRequest(ImageMessage):
                           (Camera.RGB_RIGHT, Compression.OFF, Channels.THREE),
                           (Camera.SEGMENTATION, Compression.OFF, Channels.THREE),
                           (Camera.DEPTH, Compression.OFF, Channels.THREE),
-                          (Camera.THIRD_PERSON, Compression.OFF, Channels.THREE)
+                          (Camera.THIRD_PERSON, Compression.OFF, Channels.THREE),
+                          (Camera.INSTANCE_SEGMENTATION, Compression.OFF, Channels.THREE)
                           ]):
         self._validate_cameras(cameras)
 
@@ -301,14 +303,18 @@ class DataResponse(object):
             img = np.frombuffer(images[:img_payload_length].tobytes(), dtype=np.uint8)  # python 2/3
             if img_type == 'cRGB':
                 img = Image.open(io.BytesIO(img))
-            else:  # 'xRGB', 'xGRY', or 'xFLT
+            else:  # 'xRGB', 'xGRY', 'xFLT' or 'xINT'
                 img = img.reshape(img_height, img_width, -1).squeeze()
                 img = np.flip(img, 0)  # flip vertically
 
             if img_type == 'xFLT':
                 # decode an RGBA color image into a float32 image
-                img = np.dot(img, np.asarray((1.0, 1.0/255.0, 1.0/(255.0*255.0), 1.0/(255.0*255.0*255.0)))).astype('float32')
+                img = np.dot(img, np.array([1.00000000e+00, 3.92156863e-03, 1.53787005e-05, 6.03086294e-08])).astype('float32')  # np.asarray((1.0, 1.0/255.0, 1.0/(255.0*255.0), 1.0/(255.0*255.0*255.0)))
                 img /= 255.0
+
+            if img_type == 'xINT':
+                # decode RGBA image into a unsigned int image. Background is given the maximum value by default (16646655).
+                img = np.dot(img, np.array([1, 255, 65025])).astype(np.uint32)  # np.array([1, 255, 255**2])
 
             images = images[img_payload_length:]
 
