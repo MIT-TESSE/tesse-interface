@@ -23,7 +23,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='tesse',
-    version='0.1.1',
+    version='0.1.2+snapshot',
     description='TESSE python interface',
     packages=find_packages('src'),
     # tell setuptools that all packages will be under the 'src' directory
