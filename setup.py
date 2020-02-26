@@ -23,10 +23,11 @@ from setuptools import setup, find_packages
 
 setup(
     name='tesse',
-    version='0.1.0',
+    version='0.1.1',
     description='TESSE python interface',
     packages=find_packages('src'),
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
     package_dir={'': 'src'},
+    install_requires=['numpy >= 1.16.5', 'defusedxml >= 0.6.0', 'Pillow >= 6.2.1'],
 )
