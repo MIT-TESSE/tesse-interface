@@ -104,5 +104,4 @@ class UdpListener(threading.Thread):
                     last_game_time = game_time
 
             except socket.timeout as error:
-                print("UdpListener error: ", error)
                 continue
