@@ -29,5 +29,5 @@ setup(
     # tell setuptools that all packages will be under the 'src' directory
     # and nowhere else
     package_dir={'': 'src'},
-    install_requires=['numpy >= 1.16.5', 'defusedxml >= 0.6.0', 'Pillow >= 6.2.1'],
+    install_requires=['numpy >= 1.14', 'defusedxml >= 0.6.0', 'Pillow >= 5'],
 )
